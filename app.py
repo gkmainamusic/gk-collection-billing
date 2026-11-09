@@ -8,81 +8,74 @@ st.set_page_config(page_title="GK Collection — Billoora Suite", page_icon="�
 # Custom CSS to match Screenshot 1 UI
 st.markdown("""
 <style>
-    .stApp { background-color: #f4f6fb; color: #1e293b; }
-    
-    /* Top Header Banner */
-    .top-banner {
-        background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
-        padding: 18px 28px;
-        border-radius: 14px;
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 24px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-    }
-    .brand-box { display: flex; align-items: center; gap: 14px; }
-    .logo-icon {
-        background: #ea580c;
-        color: white;
-        font-weight: 800;
-        padding: 10px 14px;
-        border-radius: 12px;
-        font-size: 20px;
-        letter-spacing: 1px;
-    }
-    .pro-badge {
-        background: rgba(234, 179, 8, 0.2);
-        color: #facc15;
-        border: 1px solid #eab308;
-        font-size: 11px;
-        padding: 2px 9px;
-        border-radius: 12px;
-        margin-left: 8px;
-        font-weight: 700;
-    }
-    
-    /* White & Dark Metric Cards */
-    .b-card {
-        background: #ffffff;
-        padding: 22px;
-        border-radius: 16px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-        margin-bottom: 16px;
-    }
-    .b-card-dark {
-        background: #0f172a;
-        padding: 22px;
-        border-radius: 16px;
-        color: #ffffff;
-        box-shadow: 0 4px 12px rgba(15,23,42,0.18);
-        margin-bottom: 16px;
-    }
-    .c-title { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.6px; }
-    .c-title-gold { font-size: 12px; font-weight: 700; color: #facc15; text-transform: uppercase; letter-spacing: 0.6px; }
-    .c-val { font-size: 30px; font-weight: 800; color: #0f172a; margin: 8px 0 4px 0; }
-    .c-val-white { font-size: 30px; font-weight: 800; color: #ffffff; margin: 8px 0 4px 0; }
-    .c-sub { font-size: 13px; color: #64748b; }
-    .c-sub-green { font-size: 13px; color: #16a34a; font-weight: 600; }
-    .c-sub-light { font-size: 13px; color: #94a3b8; }
-
-    /* Progress Bars */
-    .plat-row { margin-bottom: 16px; }
-    .plat-label { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
-    .bar-bg { width: 100%; background: #f1f5f9; height: 10px; border-radius: 8px; overflow: hidden; }
+.stApp { background-color: #f4f6fb; color: #1e293b; }
+.top-banner {
+    background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+    padding: 18px 28px;
+    border-radius: 14px;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+.brand-box { display: flex; align-items: center; gap: 14px; }
+.logo-icon {
+    background: #ea580c;
+    color: white;
+    font-weight: 800;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 20px;
+    letter-spacing: 1px;
+}
+.pro-badge {
+    background: rgba(234, 179, 8, 0.2);
+    color: #facc15;
+    border: 1px solid #eab308;
+    font-size: 11px;
+    padding: 2px 9px;
+    border-radius: 12px;
+    margin-left: 8px;
+    font-weight: 700;
+}
+.b-card {
+    background: #ffffff;
+    padding: 22px;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    margin-bottom: 16px;
+}
+.b-card-dark {
+    background: #0f172a;
+    padding: 22px;
+    border-radius: 16px;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(15,23,42,0.18);
+    margin-bottom: 16px;
+}
+.c-title { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.6px; }
+.c-title-gold { font-size: 12px; font-weight: 700; color: #facc15; text-transform: uppercase; letter-spacing: 0.6px; }
+.c-val { font-size: 30px; font-weight: 800; color: #0f172a; margin: 8px 0 4px 0; }
+.c-val-white { font-size: 30px; font-weight: 800; color: #ffffff; margin: 8px 0 4px 0; }
+.c-sub { font-size: 13px; color: #64748b; }
+.c-sub-green { font-size: 13px; color: #16a34a; font-weight: 600; }
+.c-sub-light { font-size: 13px; color: #94a3b8; }
+.plat-row { margin-bottom: 16px; }
+.plat-label { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.bar-bg { width: 100%; background: #f1f5f9; height: 10px; border-radius: 8px; overflow: hidden; }
 </style>
-
 <div class="top-banner">
-    <div class="brand-box">
-        <div class="logo-icon">GK</div>
-        <div>
-            <div style="font-size: 20px; font-weight: 700;">GK Collection <span class="pro-badge">PRO</span></div>
-            <div style="font-size: 12px; color: #94a3b8;">Billoora E-Com & GST Suite • Guwahati, Assam</div>
-        </div>
-    </div>
-    <div style="font-size: 13px; color: #cbd5e1;">Connected to Google Sheets Live DB</div>
+<div class="brand-box">
+<div class="logo-icon">GK</div>
+<div>
+<div style="font-size: 20px; font-weight: 700;">GK Collection <span class="pro-badge">PRO</span></div>
+<div style="font-size: 12px; color: #94a3b8;">Billoora E-Com & GST Suite • Guwahati, Assam</div>
+</div>
+</div>
+<div style="font-size: 13px; color: #cbd5e1;">Connected to Google Sheets Live DB</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -128,31 +121,25 @@ with tab1:
 
     r1c1, r1c2 = st.columns(2)
     with r1c1:
-        st.markdown(f"""
-        <div class="b-card">
-            <div class="c-title">TOTAL SALES (BIKRI) 📈</div>
-            <div class="c-val">₹{total_sales:,.0f}</div>
-            <div><span class="c-sub-green">GST Inclusive</span> <span class="c-sub">(Meesho/Amazon)</span></div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="b-card">
+<div class="c-title">TOTAL SALES (BIKRI) 📈</div>
+<div class="c-val">₹{total_sales:,.0f}</div>
+<div><span class="c-sub-green">GST Inclusive</span> <span class="c-sub">(Meesho/Amazon)</span></div>
+</div>""", unsafe_allow_html=True)
     with r1c2:
-        st.markdown(f"""
-        <div class="b-card">
-            <div class="c-title">WHOLESALE & PACKING KHARCHA 🛒</div>
-            <div class="c-val">₹{total_purchases:,.0f}</div>
-            <div class="c-sub">Stock + Zip-lock, Labels & Cards</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="b-card">
+<div class="c-title">WHOLESALE & PACKING KHARCHA 🛒</div>
+<div class="c-val">₹{total_purchases:,.0f}</div>
+<div class="c-sub">Stock + Zip-lock, Labels & Cards</div>
+</div>""", unsafe_allow_html=True)
 
     r2c1, r2c2 = st.columns(2)
     with r2c1:
-        st.markdown(f"""
-        <div class="b-card">
-            <div class="c-title">NET CASH BALANCE / PROFIT 👛</div>
-            <div class="c-val">₹{net_cash:,.0f}</div>
-            <div class="c-sub">Sales minus Total Purchases</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="b-card">
+<div class="c-title">NET CASH BALANCE / PROFIT 👛</div>
+<div class="c-val">₹{net_cash:,.0f}</div>
+<div class="c-sub">Sales minus Total Purchases</div>
+</div>""", unsafe_allow_html=True)
     with r2c2:
         if itc_balance >= 0:
             gst_label = f"₹{itc_balance:,.2f} ITC"
@@ -160,15 +147,13 @@ with tab1:
         else:
             gst_label = f"₹{abs(itc_balance):,.2f} Payable"
             gst_sub = "Output GST minus ITC (Tax Dena Hai)"
-        st.markdown(f"""
-        <div class="b-card-dark">
-            <div class="c-title-gold">GST & ITC HISAB 🛡️</div>
-            <div class="c-val-white">{gst_label}</div>
-            <div class="c-sub-light">{gst_sub}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="b-card-dark">
+<div class="c-title-gold">GST & ITC HISAB 🛡️</div>
+<div class="c-val-white">{gst_label}</div>
+<div class="c-sub-light">{gst_sub}</div>
+</div>""", unsafe_allow_html=True)
 
-    # Platform Breakdown Bar Card
+    # Platform Breakdown Bar Card (Zero Indentation so Markdown renders HTML properly)
     def get_plat_sum(plat_name):
         if sales_df.empty:
             return 0.0
@@ -183,25 +168,22 @@ with tab1:
     a_pct = round((a_sales / total_sales) * 100) if total_sales > 0 else 0
     f_pct = round((f_sales / total_sales) * 100) if total_sales > 0 else 0
 
-    st.markdown(f"""
-    <div class="b-card">
-        <div style="font-size:16px; font-weight:700; color:#0f172a;">Platform-Wise Bikri (Meesho vs Amazon vs Flipkart)</div>
-        <div class="c-sub" style="margin-bottom:18px;">Kis marketplace se kitna revenue aa raha hai</div>
-        
-        <div class="plat-row">
-            <div class="plat-label"><span style="color:#be185d;">Meesho Supplier Store</span><span>₹{m_sales:,.0f} ({m_pct}%)</span></div>
-            <div class="bar-bg"><div style="width:{m_pct}%; background:#db2777; height:100%;"></div></div>
-        </div>
-        <div class="plat-row">
-            <div class="plat-label"><span style="color:#b45309;">Amazon Seller Central</span><span>₹{a_sales:,.0f} ({a_pct}%)</span></div>
-            <div class="bar-bg"><div style="width:{a_pct}%; background:#f59e0b; height:100%;"></div></div>
-        </div>
-        <div class="plat-row">
-            <div class="plat-label"><span style="color:#1d4ed8;">Flipkart / Direct Orders</span><span>₹{f_sales:,.0f} ({f_pct}%)</span></div>
-            <div class="bar-bg"><div style="width:{f_pct}%; background:#2563eb; height:100%;"></div></div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""<div class="b-card">
+<div style="font-size:16px; font-weight:700; color:#0f172a;">Platform-Wise Bikri (Meesho vs Amazon vs Flipkart)</div>
+<div class="c-sub" style="margin-bottom:18px;">Kis marketplace se kitna revenue aa raha hai</div>
+<div class="plat-row">
+<div class="plat-label"><span style="color:#be185d;">Meesho Supplier Store</span><span>₹{m_sales:,.0f} ({m_pct}%)</span></div>
+<div class="bar-bg"><div style="width:{m_pct}%; background:#db2777; height:100%;"></div></div>
+</div>
+<div class="plat-row">
+<div class="plat-label"><span style="color:#b45309;">Amazon Seller Central</span><span>₹{a_sales:,.0f} ({a_pct}%)</span></div>
+<div class="bar-bg"><div style="width:{a_pct}%; background:#f59e0b; height:100%;"></div></div>
+</div>
+<div class="plat-row">
+<div class="plat-label"><span style="color:#1d4ed8;">Flipkart / Direct Orders</span><span>₹{f_sales:,.0f} ({f_pct}%)</span></div>
+<div class="bar-bg"><div style="width:{f_pct}%; background:#2563eb; height:100%;"></div></div>
+</div>
+</div>""", unsafe_allow_html=True)
 
     col_l, col_r = st.columns(2)
     with col_l:
@@ -232,15 +214,13 @@ with tab2:
         gst_included = round(calc_selling_price - taxable_val, 2)
         discount_pct = round(((suggested_mrp - calc_selling_price) / suggested_mrp) * 100)
 
-        st.markdown(f"""
-        <div class="b-card">
-            <div class="c-title">📌 LISTING SUMMARY (COPY TO MEESHO/AMAZON)</div>
-            <div class="c-val">₹{calc_selling_price} <span style="font-size:14px; font-weight:500; color:#16a34a;">(GST Inclusive Selling Price)</span></div>
-            <p style="margin:8px 0;"><b>Suggested Catalog MRP:</b> ₹{suggested_mrp} <i>({discount_pct}% OFF)</i></p>
-            <p style="margin:8px 0;"><b>Tax Breakdown:</b> Taxable Value: ₹{taxable_val} | GST ({gst_slab}%): ₹{gst_included}</p>
-            <p style="margin:8px 0;"><b>Packed Courier Weight:</b> ~{net_wt + 40}g (with box & flyer)</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="b-card">
+<div class="c-title">📌 LISTING SUMMARY (COPY TO MEESHO/AMAZON)</div>
+<div class="c-val">₹{calc_selling_price} <span style="font-size:14px; font-weight:500; color:#16a34a;">(GST Inclusive Selling Price)</span></div>
+<p style="margin:8px 0;"><b>Suggested Catalog MRP:</b> ₹{suggested_mrp} <i>({discount_pct}% OFF)</i></p>
+<p style="margin:8px 0;"><b>Tax Breakdown:</b> Taxable Value: ₹{taxable_val} | GST ({gst_slab}%): ₹{gst_included}</p>
+<p style="margin:8px 0;"><b>Packed Courier Weight:</b> ~{net_wt + 40}g (with box & flyer)</p>
+</div>""", unsafe_allow_html=True)
 
         if st.button("💾 Save Product to Catalog Sheet"):
             new_cat = pd.DataFrame([{
