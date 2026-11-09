@@ -2,22 +2,14 @@ import streamlit as st
 import pandas as pd
 import json
 import io
-from datetime import date, datetime
+from datetime import date
 from streamlit_gsheets import GSheetsConnection
 
-st.set_page_config(page_title="BILLORA — Business Suite", page_icon="🟣", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="GK Collection — Billoora Suite", page_icon="💎", layout="wide", initial_sidebar_state="expanded")
 
 # --- SESSION STATE INITIALIZATION ---
 if "page" not in st.session_state:
     st.session_state.page = "GSTR-1 Filing"
-if "nav_sales_open" not in st.session_state:
-    st.session_state.nav_sales_open = False
-if "nav_purch_open" not in st.session_state:
-    st.session_state.nav_purch_open = False
-if "nav_filings_open" not in st.session_state:
-    st.session_state.nav_filings_open = True
-if "nav_rev_open" not in st.session_state:
-    st.session_state.nav_rev_open = False
 if "khata_mode" not in st.session_state:
     st.session_state.khata_mode = "Customers"
 if "parties_list" not in st.session_state:
@@ -36,91 +28,151 @@ if "biz_name" not in st.session_state:
 if "user_gstin" not in st.session_state:
     st.session_state.user_gstin = "18AAAAA0000A1Z5"
 
-# --- EXACT BILLOORA CSS STYLING ---
+# --- PREMIUM FONT & EXACT BILLOORA SIDEBAR CSS ---
 st.markdown("""
 <style>
-    /* Global App Background */
-    .stApp { background-color: #f4f6fa; color: #0f172a; font-family: 'Inter', system-ui, sans-serif; }
-    .block-container { padding-top: 1.2rem !important; padding-bottom: 3rem !important; max-width: 98% !important; }
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-    /* Left Sidebar Exact White Styling */
+    html, body, [class*="css"], .stApp, button, input, select, textarea {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+
+    .stApp {
+        background-color: #f4f6fa !important;
+        color: #0f172a !important;
+    }
+
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 97% !important;
+    }
+
+    /* Left Sidebar Clean White Design */
     section[data-testid="stSidebar"] {
         background-color: #ffffff !important;
         border-right: 1px solid #e2e8f0 !important;
-        width: 255px !important;
+        width: 265px !important;
     }
-    section[data-testid="stSidebar"] .block-container { padding-top: 1rem !important; padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 1.2rem !important;
+        padding-left: 0.9rem !important;
+        padding-right: 0.9rem !important;
+    }
 
-    /* Sidebar Buttons as Clean Menu Items */
+    /* Force Left Alignment & Clean Look on Sidebar Buttons */
+    section[data-testid="stSidebar"] .stButton {
+        margin-bottom: -6px !important;
+    }
     section[data-testid="stSidebar"] .stButton > button {
-        width: 100%;
-        text-align: left !important;
+        width: 100% !important;
+        display: flex !important;
         justify-content: flex-start !important;
+        text-align: left !important;
         background-color: transparent !important;
         color: #475569 !important;
         border: 1px solid transparent !important;
-        border-radius: 8px !important;
-        padding: 7px 12px !important;
+        border-radius: 9px !important;
+        padding: 8px 12px !important;
         font-size: 13.5px !important;
-        font-weight: 500 !important;
+        font-weight: 600 !important;
         box-shadow: none !important;
-        margin-bottom: 2px !important;
-        transition: all 0.15s ease;
+        transition: all 0.15s ease !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button > div {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: flex-start !important;
+        text-align: left !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button p {
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-size: 13.5px !important;
+        font-weight: 600 !important;
+        margin: 0 !important;
+        text-align: left !important;
     }
     section[data-testid="stSidebar"] .stButton > button:hover {
-        background-color: #f8fafc !important;
+        background-color: #f1f5f9 !important;
         color: #0f172a !important;
     }
-    /* Active Sidebar Button (Highlighted Purple Box like Screenshot) */
+
+    /* Active Selected Menu Item (Billoora Purple Highlight) */
     section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
-        background-color: #f5f3ff !important;
+        background-color: #eef2ff !important;
         color: #4f46e5 !important;
-        border: 1px solid #6366f1 !important;
-        font-weight: 600 !important;
+        border: 1.5px solid #6366f1 !important;
+        font-weight: 700 !important;
     }
 
-    /* Top Header Bar */
-    .billora-topbar {
+    /* Clean Sidebar Dropdown Expanders (Sales, Purchases, Filings, Revenue) */
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        margin-bottom: -6px !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] details {
+        border: none !important;
+        background: transparent !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] summary {
+        padding: 8px 12px !important;
+        border-radius: 9px !important;
+        color: #475569 !important;
+        font-weight: 600 !important;
+        font-size: 13.5px !important;
+        background-color: transparent !important;
+        transition: all 0.15s ease !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] summary:hover {
+        background-color: #f1f5f9 !important;
+        color: #0f172a !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] summary p {
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-size: 13.5px !important;
+        font-weight: 600 !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] {
+        padding: 4px 0px 6px 14px !important;
+        border-left: 2px solid #e2e8f0 !important;
+        margin-left: 18px !important;
+    }
+
+    /* Primary Action Buttons in Main Page (Purple & Teal) */
+    div[data-testid="stMainBlockContainer"] .stButton > button[kind="primary"],
+    div[data-testid="stMainBlockContainer"] .stDownloadButton > button[kind="primary"] {
+        background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%) !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 9px !important;
+        font-weight: 600 !important;
+        padding: 8px 18px !important;
+        box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25) !important;
+    }
+
+    /* Business Top Pill */
+    .biz-selector {
         background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 10px 20px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 20px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    }
-    .new-btn-badge {
-        background-color: #0d9488;
-        color: white;
-        font-weight: 600;
-        font-size: 13px;
-        padding: 7px 16px;
-        border-radius: 8px;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-    }
-    .biz-selector {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
         border-radius: 10px;
-        padding: 5px 14px;
+        padding: 6px 14px;
         display: inline-flex;
         align-items: center;
         gap: 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     }
     .biz-icon {
         background: #4f46e5;
         color: white;
-        border-radius: 6px;
-        padding: 5px 8px;
+        border-radius: 7px;
+        padding: 5px 9px;
         font-size: 13px;
         font-weight: 700;
     }
 
-    /* White Containers & Metric Cards */
+    /* White Containers & Cards */
     .b-section-box {
         background: #ffffff;
         border: 1px solid #e2e8f0;
@@ -143,15 +195,15 @@ st.markdown("""
         border-radius: 14px;
         padding: 16px;
         margin-bottom: 10px;
-        min-height: 155px;
+        min-height: 158px;
     }
     .b-plat-card-active {
         background: #ffffff;
-        border: 1.5px solid #34d399;
+        border: 1.5px solid #10b981;
         border-radius: 14px;
         padding: 16px;
         margin-bottom: 10px;
-        min-height: 155px;
+        min-height: 158px;
         box-shadow: 0 4px 12px rgba(16,185,129,0.06);
     }
     .pill-b2c {
@@ -260,92 +312,80 @@ def standardize_b2c_df(df, source_name, sign=1):
     return out[["Source", "POS", "GST_Rate", "Taxable_Value"]]
 
 # ==============================================================================
-# LEFT SIDEBAR NAVIGATION (EXACT BILLOORA REPLICA FROM SCREENSHOTS)
+# LEFT SIDEBAR NAVIGATION (WITH PROPER CLEAN DROPDOWN EXPANDERS)
 # ==============================================================================
-def nav_item(label, target_page, indent=False):
+def nav_btn(label, target_page):
     is_active = (st.session_state.page == target_page)
-    display_lbl = f"    {label}" if indent else label
-    if st.button(display_lbl, key=f"nav_{target_page}_{label}", type="primary" if is_active else "secondary", use_container_width=True):
+    if st.button(label, key=f"nav_{target_page}", type="primary" if is_active else "secondary", use_container_width=True):
         st.session_state.page = target_page
         st.rerun()
 
 with st.sidebar:
     st.markdown("""
-    <div style="padding: 4px 8px 16px 8px;">
-        <div style="font-size: 21px; font-weight: 800; color: #4f46e5; letter-spacing: 0.5px;">BILLORA</div>
-        <div style="font-size: 9.5px; font-weight: 700; color: #94a3b8; letter-spacing: 1.5px;">BUSINESS SUITE</div>
+    <div style="padding: 2px 10px 18px 10px; border-bottom: 1px solid #f1f5f9; margin-bottom: 10px;">
+        <div style="font-size: 22px; font-weight: 800; color: #4f46e5; letter-spacing: 0.4px;">BILLORA</div>
+        <div style="font-size: 10px; font-weight: 700; color: #94a3b8; letter-spacing: 1.6px;">BUSINESS SUITE • GK</div>
     </div>
     """, unsafe_allow_html=True)
 
-    nav_item("⊞  Dashboard", "Dashboard")
-    nav_item("📖  Khata Book", "Khata Book")
-    nav_item("💬  Chat                       🔒", "Chat")
-    nav_item("🤝  Connections", "Connections")
-    nav_item("👑  Pricing                 Free", "Pricing")
+    nav_btn("⊞  Dashboard", "Dashboard")
+    nav_btn("📖  Khata Book", "Khata Book")
+    nav_btn("💬  Chat  🔒", "Chat")
+    nav_btn("🤝  Connections", "Connections")
+    nav_btn("👑  Pricing  (Free)", "Pricing")
 
-    # Collapsible Sales Group
-    sales_arrow = "⌄" if st.session_state.nav_sales_open else "›"
-    if st.button(f"📈  Sales                        {sales_arrow}", key="grp_sales", use_container_width=True):
-        st.session_state.nav_sales_open = not st.session_state.nav_sales_open
-        st.rerun()
-    if st.session_state.nav_sales_open:
-        nav_item("📄  Invoices", "Invoices", indent=True)
+    # Dropdown 1: Sales
+    with st.expander("📈  Sales", expanded=(st.session_state.page in ["Invoices"])):
+        nav_btn("📄  Invoices", "Invoices")
 
-    # Collapsible Purchases Group
-    purch_arrow = "⌄" if st.session_state.nav_purch_open else "›"
-    if st.button(f"🛒  Purchases                 {purch_arrow}", key="grp_purch", use_container_width=True):
-        st.session_state.nav_purch_open = not st.session_state.nav_purch_open
-        st.rerun()
-    if st.session_state.nav_purch_open:
-        nav_item("🧾  Bills", "Bills", indent=True)
-        nav_item("💳  Other Expenses", "Other Expenses", indent=True)
+    # Dropdown 2: Purchases
+    with st.expander("🛒  Purchases", expanded=(st.session_state.page in ["Bills", "Other Expenses"])):
+        nav_btn("🧾  Bills", "Bills")
+        nav_btn("💳  Other Expenses", "Other Expenses")
 
-    # Collapsible Filings Group
-    fil_arrow = "⌄" if st.session_state.nav_filings_open else "›"
-    if st.button(f"📑  Filings                      {fil_arrow}", key="grp_filings", use_container_width=True):
-        st.session_state.nav_filings_open = not st.session_state.nav_filings_open
-        st.rerun()
-    if st.session_state.nav_filings_open:
-        nav_item("📄  GSTR-1 Filing", "GSTR-1 Filing", indent=True)
-        nav_item("📑  GSTR-3B Filing", "GSTR-3B Filing", indent=True)
-        nav_item("🗂️  Saved Reports", "Saved Reports", indent=True)
+    # Dropdown 3: Filings (GSTR-1, GSTR-3B, Saved Reports inside dropdown)
+    with st.expander("📑  Filings", expanded=(st.session_state.page in ["GSTR-1 Filing", "GSTR-3B Filing", "Saved Reports"])):
+        nav_btn("📄  GSTR-1 Filing", "GSTR-1 Filing")
+        nav_btn("📑  GSTR-3B Filing", "GSTR-3B Filing")
+        nav_btn("🗂️  Saved Reports", "Saved Reports")
 
-    nav_item("📊  Reports                     ›", "Reports")
-    nav_item("👥  Parties                      ›", "Parties")
+    # Dropdown 4: Reports
+    with st.expander("📊  Reports", expanded=(st.session_state.page in ["Sales Reports", "Tax Reports"])):
+        nav_btn("📊  Sales Reports", "Sales Reports")
+        nav_btn("📑  Tax Reports", "Tax Reports")
 
-    # Collapsible Revenue Group
-    rev_arrow = "⌄" if st.session_state.nav_rev_open else "›"
-    if st.button(f"📈  Revenue                    {rev_arrow}", key="grp_rev", use_container_width=True):
-        st.session_state.nav_rev_open = not st.session_state.nav_rev_open
-        st.rerun()
-    if st.session_state.nav_rev_open:
-        nav_item("🔌  Sources                  🔒", "Revenue - Sources", indent=True)
-        nav_item("📊  Reports                  🔒", "Revenue - Reports", indent=True)
-        nav_item("✨  AI Summary            🔒", "Revenue - AI Summary", indent=True)
+    # Dropdown 5: Parties
+    with st.expander("👥  Parties", expanded=(st.session_state.page in ["Parties"])):
+        nav_btn("👥  Customers & Vendors", "Parties")
 
-    nav_item("💳  Billing                       ›", "Billing")
+    # Dropdown 6: Revenue
+    with st.expander("📈  Revenue", expanded=(st.session_state.page in ["Revenue - Sources", "Revenue - Reports", "Revenue - AI Summary"])):
+        nav_btn("🔌  Sources  🔒", "Revenue - Sources")
+        nav_btn("📊  Reports  🔒", "Revenue - Reports")
+        nav_btn("✨  AI Summary  🔒", "Revenue - AI Summary")
 
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    # Dropdown 7: Billing
+    with st.expander("💳  Billing", expanded=(st.session_state.page in ["Billing"])):
+        nav_btn("💳  Plans & Subscription", "Billing")
+
+    st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
     st.divider()
-    nav_item("⚙️  Settings", "Settings")
+    nav_btn("⚙️  Settings", "Settings")
 
 # ==============================================================================
-# TOP BAR (+ New Dropdown & Business Profile Pill like Screenshot)
+# TOP BAR (+ New Dropdown & Business Profile Pill)
 # ==============================================================================
-top_c1, top_c2, top_c3 = st.columns([2, 5, 3])
+top_c1, top_c2, top_c3 = st.columns([2.2, 4.8, 3])
 with top_c1:
     with st.popover("➕ New  ⌄"):
         st.markdown("**Quick Create**")
         if st.button("📄 + Issue Sale Invoice", use_container_width=True):
-            st.session_state.nav_sales_open = True
             st.session_state.page = "Invoices"
             st.rerun()
         if st.button("🧾 + Add Purchase Bill", use_container_width=True):
-            st.session_state.nav_purch_open = True
             st.session_state.page = "Bills"
             st.rerun()
         if st.button("📄 File GSTR-1 Return", use_container_width=True):
-            st.session_state.nav_filings_open = True
             st.session_state.page = "GSTR-1 Filing"
             st.rerun()
         if st.button("👤 + Add Customer / Vendor", use_container_width=True):
@@ -360,27 +400,25 @@ with top_c3:
             <span class="biz-icon">🏢</span>
             <div>
                 <div style="font-size:9px; color:#64748b; font-weight:700; text-transform:uppercase;">BUSINESS</div>
-                <div style="font-size:12.5px; color:#0f172a; font-weight:600;">{st.session_state.biz_name} ({st.session_state.user_gstin[:2]}) ⌄</div>
+                <div style="font-size:12.5px; color:#0f172a; font-weight:700;">{st.session_state.biz_name} ({st.session_state.user_gstin[:2]}) ⌄</div>
             </div>
         </div>
-        <span style="font-size:22px;">👤</span>
+        <span style="font-size:20px;">👤</span>
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown("<hr style='margin: 8px 0 20px 0; border-color: #e2e8f0;'>", unsafe_allow_html=True)
+st.markdown("<hr style='margin: 10px 0 20px 0; border-color: #e2e8f0;'>", unsafe_allow_html=True)
 
 home_state_code = st.session_state.user_gstin[:2] if len(st.session_state.user_gstin) >= 2 else "18"
 current_page = st.session_state.page
 
 # ==============================================================================
-# PAGE 1: FILINGS -> GSTR-1 FILING (SCREENSHOT 1 EXACT REPLICA)
+# PAGE 1: FILINGS -> GSTR-1 FILING
 # ==============================================================================
 if current_page == "GSTR-1 Filing":
     st.markdown("### 📄 GSTR-1 Filing")
     st.caption("Combine sales from Meesho, your Billoora invoices, and manual uploads into a single GSTR-1 return. Select one or more platforms below.")
 
-    # Period Picker Box
-    st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
     f1, f2, f3, f4 = st.columns([3, 3, 3, 1])
     filing_type = f1.selectbox("Type of Filing *", ["Monthly", "Quarterly"], key="g1_type")
     months_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
@@ -390,20 +428,17 @@ if current_page == "GSTR-1 Filing":
         st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
         if st.button("Reset", key="g1_reset", use_container_width=True):
             st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
 
     fp_code = f"{str(months_list.index(sel_month) + 1).zfill(2)}{sel_year}"
 
-    # 5 Platform Cards Row
-    st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
-    st.markdown("**Platforms**")
+    st.markdown("#### Platforms")
     c_m, c_f, c_a, c_b, c_man = st.columns(5)
 
     with c_m:
         st.markdown("""
         <div class="b-plat-card-active">
-            <div style="display:flex; justify-content:space-between;"><span class="pill-b2c">B2C • MONTHLY</span><span style="color:#10b981;">✔</span></div>
-            <div style="font-weight:700; font-size:15px; margin-top:4px;">🛍️ Meesho</div>
+            <div style="display:flex; justify-content:space-between;"><span class="pill-b2c">B2C • MONTHLY</span><span style="color:#10b981; font-weight:800;">✔</span></div>
+            <div style="font-weight:700; font-size:15.5px; margin-top:4px;">🛍️ Meesho</div>
             <div style="font-size:11.5px; color:#64748b; margin-top:4px;">From Meesho Supplier Panel → Payments → Tax Invoices & Reports.</div>
         </div>
         """, unsafe_allow_html=True)
@@ -415,7 +450,7 @@ if current_page == "GSTR-1 Filing":
         st.markdown("""
         <div class="b-plat-card">
             <span class="pill-b2c">B2C • MONTHLY</span>
-            <div style="font-weight:700; font-size:15px; margin-top:4px;">🛒 Flipkart</div>
+            <div style="font-weight:700; font-size:15.5px; margin-top:4px;">🛒 Flipkart</div>
             <div style="font-size:11.5px; color:#64748b; margin-top:4px;">From Flipkart Seller Hub → Reports → Sales Report.</div>
         </div>
         """, unsafe_allow_html=True)
@@ -426,7 +461,7 @@ if current_page == "GSTR-1 Filing":
         st.markdown("""
         <div class="b-plat-card">
             <span class="pill-b2c">B2C • MONTHLY</span>
-            <div style="font-weight:700; font-size:15px; margin-top:4px;">📦 Amazon</div>
+            <div style="font-weight:700; font-size:15.5px; margin-top:4px;">📦 Amazon</div>
             <div style="font-size:11.5px; color:#64748b; margin-top:4px;">From Amazon Seller Central → Reports → Tax Document Library → MTR.</div>
         </div>
         """, unsafe_allow_html=True)
@@ -437,7 +472,7 @@ if current_page == "GSTR-1 Filing":
         st.markdown("""
         <div class="b-plat-card">
             <span class="pill-b2c">Invoices • MONTHLY</span>
-            <div style="font-weight:700; font-size:15px; margin-top:4px;">🏢 Billoora</div>
+            <div style="font-weight:700; font-size:15.5px; margin-top:4px;">🏢 Billoora</div>
             <div style="font-size:11.5px; color:#64748b; margin-top:4px;">Include sales invoices you've raised in Billoora during this period.</div>
         </div>
         """, unsafe_allow_html=True)
@@ -449,19 +484,17 @@ if current_page == "GSTR-1 Filing":
         st.markdown("""
         <div class="b-plat-card">
             <span class="pill-b2c">Upload • MONTHLY</span>
-            <div style="font-weight:700; font-size:15px; margin-top:4px;">📄 Manual</div>
-            <div style="font-size:11.5px; color:#64748b; margin-top:4px;">Upload an Excel of sales that live outside Billoora or the e-commerce...</div>
+            <div style="font-weight:700; font-size:15.5px; margin-top:4px;">📄 Manual</div>
+            <div style="font-size:11.5px; color:#64748b; margin-top:4px;">Upload an Excel of sales that live outside Billoora or e-commerce.</div>
         </div>
         """, unsafe_allow_html=True)
         with st.popover("⬆️ Upload Data", use_container_width=True):
             man_file = st.file_uploader("Upload Manual B2C Excel / CSV", type=["xlsx", "csv"], key="g1_man")
 
-    ab1, ab2 = st.columns([8, 2])
+    ab1, ab2 = st.columns([8.2, 1.8])
     with ab2:
         analyze_clicked = st.button("Analyze", type="primary", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Process GSTR-1 Data
     dfs = []
     if m_sales_file: dfs.append(standardize_b2c_df(read_uploaded_file(m_sales_file), "Meesho", 1))
     if m_ret_file: dfs.append(standardize_b2c_df(read_uploaded_file(m_ret_file), "Meesho Return", -1))
@@ -495,10 +528,8 @@ if current_page == "GSTR-1 Filing":
             summary_rows.append({"POS": pos, "Supply": "INTRA" if is_intra else "INTER", "GST Rate (%)": rt, "Taxable Value (₹)": txval, "IGST (₹)": iamt, "CGST (₹)": camt, "SGST (₹)": samt})
 
         sum_df = pd.DataFrame(summary_rows)
-        st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
         st.markdown(f"#### GSTR-1 Analyzed Summary ({sel_month} {sel_year})")
         st.dataframe(sum_df, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
         gstr1_json_str = json.dumps({"gstin": st.session_state.user_gstin, "fp": fp_code, "version": "GST3.1.6", "hash": "hash", "b2cs": b2cs_entries}, indent=2)
         excel_buf = io.BytesIO()
@@ -514,9 +545,8 @@ if current_page == "GSTR-1 Filing":
         with pd.ExcelWriter(excel_buf, engine="openpyxl") as writer:
             pd.DataFrame().to_excel(writer, index=False)
 
-    # Bottom Bar Buttons: Copy Totals | Download Excel | Download JSON (for GST portal)
     st.markdown("<br>", unsafe_allow_html=True)
-    bot1, bot2, bot3, bot4 = st.columns([4, 2, 2, 2.5])
+    bot1, bot2, bot3, bot4 = st.columns([3.8, 1.8, 1.9, 2.5])
     with bot2:
         with st.popover("📋 Copy Totals", use_container_width=True):
             st.code(gstr1_json_str[:300])
@@ -526,13 +556,12 @@ if current_page == "GSTR-1 Filing":
         st.download_button("⬇️ Download JSON (for GST portal)", gstr1_json_str, file_name=f"GSTR1_{st.session_state.user_gstin}_{fp_code}.json", mime="application/json", type="primary", use_container_width=True)
 
 # ==============================================================================
-# PAGE 2: FILINGS -> GSTR-3B FILING (SCREENSHOT 2 EXACT REPLICA)
+# PAGE 2: FILINGS -> GSTR-3B FILING
 # ==============================================================================
 elif current_page == "GSTR-3B Filing":
-    st.markdown("### 📄 GSTR-3B Filing")
+    st.markdown("### 📑 GSTR-3B Filing")
     st.caption("Outward supplies (Table 3.1/3.2) are re-computed from the same Meesho/Billoora/manual sources as GSTR-1. Eligible/ineligible ITC (Table 4) comes from the GSTR-2B JSON you download from the GST portal.")
 
-    st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
     f1, f2, f3, f4 = st.columns([3, 3, 3, 1])
     filing_type_3b = f1.selectbox("Type of Filing *", ["Monthly", "Quarterly"], key="g3_type")
     months_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
@@ -541,37 +570,30 @@ elif current_page == "GSTR-3B Filing":
     with f4:
         st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
         st.button("Reset", key="g3_reset", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
     fp_3b = f"{str(months_list.index(sel_month_3b) + 1).zfill(2)}{sel_year_3b}"
 
-    # Green GSTR-2B Box
     st.markdown("""
     <div class="gstr2b-green-box">
-        <div style="font-weight:700; color:#14532d; font-size:14px; margin-bottom:6px;">GSTR-2B (ITC source) <span style="color:#dc2626;">*</span></div>
+        <div style="font-weight:700; color:#14532d; font-size:14px; margin-bottom:4px;">GSTR-2B (ITC source) <span style="color:#dc2626;">*</span></div>
         <div style="font-size:12px; color:#166534;">Download from GST Portal → Services → Returns → GSTR-2B → Download JSON.</div>
     </div>
     """, unsafe_allow_html=True)
     g2b_file = st.file_uploader("⬆️ Choose GSTR-2B .json file", type=["json"], key="g3_2b")
 
-    # Outward Supply Sources Section
-    st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
     st.markdown("#### Outward Supply Sources")
     chk_meesho_3b = st.checkbox("Meesho e-commerce sales (From Meesho Supplier Panel → Payments → Tax Invoices & Reports)", value=True)
     if chk_meesho_3b:
         u1, u2, u3 = st.columns(3)
-        tcs_s_3b = u1.file_uploader("TCS Sales Report * (Choose tcs_sales.xlsx)", type=["xlsx", "csv"], key="3b_u1")
-        tcs_r_3b = u2.file_uploader("TCS Sales Return Report * (Choose tcs_sales_return.xlsx)", type=["xlsx", "csv"], key="3b_u2")
-        tax_i_3b = u3.file_uploader("Tax Invoice Details * (Choose Tax_invoice_details.xlsx)", type=["xlsx", "csv"], key="3b_u3")
+        tcs_s_3b = u1.file_uploader("TCS Sales Report * (tcs_sales.xlsx)", type=["xlsx", "csv"], key="3b_u1")
+        tcs_r_3b = u2.file_uploader("TCS Sales Return Report * (tcs_sales_return.xlsx)", type=["xlsx", "csv"], key="3b_u2")
+        tax_i_3b = u3.file_uploader("Tax Invoice Details * (Tax_invoice_details.xlsx)", type=["xlsx", "csv"], key="3b_u3")
     else:
         tcs_s_3b, tcs_r_3b, tax_i_3b = None, None, None
 
-    st.markdown("<hr style='margin:12px 0;'>", unsafe_allow_html=True)
     chk_billoora_3b = st.checkbox("Billoora invoices (my own sales) — Date range is set automatically from the period picker above.", value=True)
-    st.markdown("<hr style='margin:12px 0;'>", unsafe_allow_html=True)
     chk_manual_3b = st.checkbox("Manual sales upload — Same template as GSTR-1's manual upload.")
     man_3b_file = st.file_uploader("Upload Manual Sales Excel", type=["xlsx", "csv"], key="3b_man") if chk_manual_3b else None
-    st.markdown('</div>', unsafe_allow_html=True)
 
     gen_3b = st.button("📄 Generate GSTR-3B", type="primary")
 
@@ -598,15 +620,13 @@ elif current_page == "GSTR-3B Filing":
                     igst_tot += tx * (rt / 100.0)
 
         itc_claim = pd.to_numeric(purch_df["ITC_Claimed"], errors="coerce").sum() if not purch_df.empty else 0.0
-        st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
         st.markdown("#### Computed GSTR-3B Summary (Table 3.1 & Table 4 Eligible ITC)")
         st.dataframe(pd.DataFrame([{"Outward Taxable (₹)": round(tx_tot, 2), "Output IGST (₹)": round(igst_tot, 2), "Output CGST (₹)": round(cgst_tot, 2), "Output SGST (₹)": round(sgst_tot, 2), "Eligible ITC from Bills/2B (₹)": round(itc_claim, 2)}]), use_container_width=True)
         g3b_json = json.dumps({"gstin": st.session_state.user_gstin, "ret_period": fp_3b, "sup_details": {"osup_det": {"txval": round(tx_tot, 2), "iamt": round(igst_tot, 2), "camt": round(cgst_tot, 2), "samt": round(sgst_tot, 2)}}, "itc_elg": {"itc_avl": [{"ty": "OTH", "iamt": 0.0, "camt": round(itc_claim/2, 2), "samt": round(itc_claim/2, 2)}]}}, indent=2)
         st.download_button("⬇️ Download GSTR-3B JSON (for GST Portal)", g3b_json, file_name=f"GSTR3B_{fp_3b}.json", mime="application/json", type="primary")
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# PAGE 3: SALES -> INVOICES (SCREENSHOT 3 EXACT REPLICA)
+# PAGE 3: SALES -> INVOICES
 # ==============================================================================
 elif current_page == "Invoices":
     ih1, ih2 = st.columns([5, 5])
@@ -670,11 +690,8 @@ elif current_page == "Invoices":
             disp_s = sales_df[sales_df["Invoice_No"].astype(str).str.contains(q_inv, case=False, na=False) | sales_df["Platform"].astype(str).str.contains(q_inv, case=False, na=False)] if q_inv else sales_df
             st.dataframe(disp_s, use_container_width=True)
 
-    with sub_tabs[1]:
-        st.info("Use the '+ Issue Invoice' button on the top right to generate a GST invoice.")
-
 # ==============================================================================
-# PAGE 4: PURCHASES -> BILLS & OTHER EXPENSES (SCREENSHOT 4 EXACT REPLICA)
+# PAGE 4: PURCHASES -> BILLS & OTHER EXPENSES
 # ==============================================================================
 elif current_page in ["Bills", "Other Expenses"]:
     bh1, bh2 = st.columns([5, 5])
@@ -735,7 +752,7 @@ elif current_page in ["Bills", "Other Expenses"]:
             st.dataframe(disp_p, use_container_width=True)
 
 # ==============================================================================
-# PAGE 5: KHATA BOOK (SCREENSHOT 5 & 6 EXACT REPLICA)
+# PAGE 5: KHATA BOOK
 # ==============================================================================
 elif current_page == "Khata Book":
     kh1, kh2 = st.columns([8, 2])
@@ -768,13 +785,12 @@ elif current_page == "Khata Book":
     st.markdown("<br>", unsafe_allow_html=True)
     kl, kr = st.columns([6.5, 3.5])
     with kl:
-        st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
         sc1, sc2 = st.columns([5, 5])
         sc1.markdown(f"#### {st.session_state.khata_mode}")
         q_k = sc2.text_input("Search", placeholder=f"🔍 Search {st.session_state.khata_mode.lower()}...", label_visibility="collapsed")
 
         st.markdown("""
-        <div style="padding: 18px 10px;">
+        <div class="b-section-box">
             <div style="font-size:16px; font-weight:700; color:#0f172a;">Khata Book — Credit tracking simplified.</div>
             <div style="font-size:12.5px; color:#64748b; margin:6px 0 14px 0;">Track credit given to customers and payments received, all in one place.</div>
             <div style="font-size:12.5px; color:#475569; margin-bottom:4px;">✔ Track credit given and payments received</div>
@@ -794,14 +810,13 @@ elif current_page == "Khata Book":
 
         if not sub_p.empty:
             st.dataframe(sub_p, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
     with kr:
         st.markdown('<div class="b-section-box"><div style="font-weight:700;">📉 Top Outstanding</div><div style="font-size:12.5px; color:#94a3b8; text-align:center; padding:25px 0;">No outstanding balances</div></div>', unsafe_allow_html=True)
         st.markdown('<div class="b-section-box"><div style="font-weight:700;">🕒 Recent Transactions</div><div style="font-size:12.5px; color:#94a3b8; text-align:center; padding:25px 0;">No recent transactions</div></div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# PAGE 6: DASHBOARD (MAIN OVERVIEW)
+# PAGE 6: DASHBOARD
 # ==============================================================================
 elif current_page == "Dashboard":
     st.markdown("## 📊 Business Overview & GST Dashboard")
@@ -819,22 +834,19 @@ elif current_page == "Dashboard":
     st.markdown("<br>", unsafe_allow_html=True)
     cl, cr = st.columns(2)
     with cl:
-        st.markdown('<div class="b-section-box"><b>Recent Sales Invoices</b>', unsafe_allow_html=True)
+        st.markdown("**Recent Sales Invoices**")
         st.dataframe(sales_df.tail(8), use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
     with cr:
-        st.markdown('<div class="b-section-box"><b>Recent Vendor Purchase Bills (ITC)</b>', unsafe_allow_html=True)
+        st.markdown("**Recent Vendor Purchase Bills (ITC)**")
         st.dataframe(purch_df.tail(8), use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# PAGE 7: PRICING (MARKETPLACE PRICE CALCULATOR & PLAN INFO)
+# PAGE 7: PRICING
 # ==============================================================================
 elif current_page == "Pricing":
     st.markdown("## 👑 Pricing & Product Margin Calculator")
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
         sku = st.text_input("SKU Code", "GK-BR-001")
         prod_name = st.text_input("Product Name", "GK Collection Gold-Plated Bracelet")
         buy_cost = st.number_input("Wholesale Buy Cost (₹)", value=50.0)
@@ -842,7 +854,6 @@ elif current_page == "Pricing":
         ship_fee = st.number_input("Shipping / Platform Fee (₹)", value=55.0)
         profit = st.number_input("Target Net Profit (₹)", value=50.0)
         gst_slab = st.selectbox("GST %", [3, 5, 12, 18], index=0)
-        st.markdown('</div>', unsafe_allow_html=True)
     with c2:
         sp = round(buy_cost + pack_cost + ship_fee + profit)
         mrp = max(sp * 2, 299)
@@ -862,7 +873,7 @@ elif current_page == "Pricing":
     st.dataframe(cat_df, use_container_width=True)
 
 # ==============================================================================
-# PAGE 8: REMAINING SIDEBAR PAGES (SAVED REPORTS, PARTIES, CONNECTIONS, CHAT, SETTINGS)
+# PAGE 8: REMAINING SIDEBAR PAGES
 # ==============================================================================
 elif current_page == "Saved Reports":
     st.markdown("## 🗂️ Saved GST Reports")
@@ -895,16 +906,13 @@ elif current_page == "Chat":
         st.session_state.chat_history.append({"role": "assistant", "text": reply})
         st.rerun()
 
-elif current_page in ["Reports", "Billing", "Revenue - Sources", "Revenue - Reports", "Revenue - AI Summary"]:
+elif current_page in ["Sales Reports", "Tax Reports", "Billing", "Revenue - Sources", "Revenue - Reports", "Revenue - AI Summary"]:
     st.markdown(f"## 📈 {current_page}")
-    st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
     st.write("**Channel-Wise Revenue & Tax Breakdown**")
     st.dataframe(sales_df, use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 elif current_page == "Settings":
     st.markdown("## ⚙️ Business & GST Settings")
-    st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
     st.session_state.biz_name = st.text_input("Legal / Trade Business Name", value=st.session_state.biz_name)
     st.session_state.user_gstin = st.text_input("Registered GSTIN (Assam - 18)", value=st.session_state.user_gstin)
     st.text_input("Principal Place of Business (GST Registered)", value="Permanent Home Address, Assam")
@@ -912,4 +920,3 @@ elif current_page == "Settings":
     if st.button("Save Settings", type="primary"):
         st.success("Business profile updated across all GST returns!")
         st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
