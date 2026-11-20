@@ -5,12 +5,25 @@ import io
 from datetime import date
 from streamlit_gsheets import GSheetsConnection
 
+# Optional PDF generator (if reportlab is in requirements.txt, direct PDF works; otherwise HTML print fallback works automatically)
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    HAS_REPORTLAB = True
+except ImportError:
+    HAS_REPORTLAB = False
+
 st.set_page_config(page_title="BILLORA — Business Suite", page_icon="🟣", layout="wide", initial_sidebar_state="expanded")
 
 # --- FAST GOOGLE SHEETS CONNECTION & SESSION CACHE (INSTANT SPEED) ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-sales_cols = ["Date", "Invoice_No", "Platform", "Product_Name", "SKU", "Qty", "Selling_Price", "GST_Rate", "Taxable_Value", "CGST", "SGST", "Total"]
+sales_cols = [
+    "Date", "Invoice_No", "Platform", "Product_Name", "SKU", "Qty",
+    "Selling_Price", "GST_Rate", "Taxable_Value", "CGST", "SGST", "IGST", "Total", "Credit_Note_Ref"
+]
 purch_cols = ["Date", "Bill_No", "Supplier_Name", "Category", "Total_Bill_Amount", "GST_Rate", "Taxable_Amount", "ITC_Claimed"]
 cat_cols = ["SKU", "Product_Name", "Buy_Cost", "Packaging_Cost", "Platform_Fee", "Profit_Margin", "Selling_Price", "Suggested_MRP", "GST_Rate", "Net_Weight_g"]
 
@@ -22,7 +35,7 @@ def fetch_sheet_once(worksheet_name, columns):
         df = df.dropna(how="all")
         for col in columns:
             if col not in df.columns:
-                df[col] = ""
+                df[col] = 0.0 if col in ["IGST", "CGST", "SGST", "Taxable_Value", "Total"] else ""
         return df[columns]
     except Exception:
         return pd.DataFrame(columns=columns)
@@ -55,9 +68,16 @@ if "businesses_list" not in st.session_state:
 if "biz_name" not in st.session_state:
     st.session_state.biz_name = "GK Maina Music"
 if "user_gstin" not in st.session_state:
-    st.session_state.user_gstin = "18AAAAA0000A1Z5"
+    st.session_state.user_gstin = "18AQRPG5129K1ZD"
+if "biz_address" not in st.session_state:
+    st.session_state.biz_address = "127, Panitola FSD Supply, Jerai Chakali Bhoria, Panitola, Tinsukia, Assam - 786183"
+if "biz_email" not in st.session_state:
+    st.session_state.biz_email = "gkmainamusic@gmail.com"
+if "biz_phone" not in st.session_state:
+    st.session_state.biz_phone = "7002174148"
 if "parties_list" not in st.session_state:
     st.session_state.parties_list = [
+        {"Name": "Phonographic Digital Ltd. (PDL - Mumbai)", "Type": "Customer", "Phone": "", "GSTIN": "27AAJCP0626K1Z9", "Balance": 0.0, "Due_Date": str(date.today())},
         {"Name": "Meesho Customer Pool", "Type": "Customer", "Phone": "9876543210", "GSTIN": "Unregistered", "Balance": 0.0, "Due_Date": str(date.today())},
         {"Name": "Fancy Bazaar Wholesale Hub", "Type": "Vendor", "Phone": "9123456789", "GSTIN": "18AABCF1234D1Z5", "Balance": 0.0, "Due_Date": str(date.today())}
     ]
@@ -69,8 +89,177 @@ if "saved_reports" not in st.session_state:
     st.session_state.saved_reports = []
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
-        {"role": "assistant", "text": "Namaste! Main Billoora AI Assistant hoon. Aap mujhse GSTR-1, GSTR-3B, Create Invoice ya Meesho/Amazon B2C filings ke baare mein pooch sakte hain."}
+        {"role": "assistant", "text": "Namaste! Main Billoora AI Assistant hoon. Aap mujhse GSTR-1, GSTR-3B, PDL Royalty Invoice ya Meesho/Amazon B2C filings ke baare mein pooch sakte hain."}
     ]
+
+# --- HELPER: GENERATE PRINTABLE HTML & PDF FOR PDL GST TAX INVOICE ---
+def build_pdl_invoice_html(data):
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Tax Invoice - {data['inv_no']}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 24px; background: #ffffff; }}
+            .inv-box {{ max-width: 800px; margin: auto; border: 1.5px solid #1e293b; padding: 24px; }}
+            .header {{ display: flex; justify-content: space-between; border-bottom: 2px solid #1e293b; padding-bottom: 12px; margin-bottom: 16px; }}
+            .title {{ font-size: 22px; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; }}
+            .sub {{ font-size: 12px; color: #475569; margin-top: 3px; }}
+            .grid2 {{ display: flex; justify-content: space-between; gap: 20px; margin-bottom: 16px; font-size: 12.5px; }}
+            .box {{ width: 48%; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 4px; }}
+            .box h4 {{ margin: 0 0 6px 0; font-size: 12px; text-transform: uppercase; color: #4f46e5; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12.5px; }}
+            th, td {{ border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }}
+            th {{ background: #f1f5f9; font-weight: 700; }}
+            .right {{ text-align: right; }}
+            .tot-row td {{ font-weight: 800; background: #f8fafc; font-size: 13.5px; }}
+            .footer {{ display: flex; justify-content: space-between; margin-top: 28px; font-size: 12px; }}
+            .sig {{ text-align: right; }}
+            @media print {{ body {{ padding: 0; }} .inv-box {{ border: 1.5px solid #000; }} }}
+        </style>
+    </head>
+    <body>
+        <div class="inv-box">
+            <div class="header">
+                <div>
+                    <div class="title">{data['seller_name']}</div>
+                    <div class="sub">Proprietor: Golap Gogoi</div>
+                    <div class="sub">{data['seller_addr']}</div>
+                    <div class="sub"><b>GSTIN:</b> {data['seller_gstin']} | <b>State:</b> Assam (18)</div>
+                    <div class="sub">Email: {data['seller_email']} | Mob: {data['seller_phone']}</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:20px; font-weight:800; color:#4f46e5;">TAX INVOICE</div>
+                    <div class="sub"><b>Invoice No:</b> {data['inv_no']}</div>
+                    <div class="sub"><b>Invoice Date:</b> {data['inv_date']}</div>
+                    <div class="sub"><b>Credit Note Ref:</b> {data['cn_ref']}</div>
+                    <div class="sub"><b>Place of Supply:</b> {data['pos']}</div>
+                </div>
+            </div>
+
+            <div class="grid2">
+                <div class="box">
+                    <h4>Billed To (Recipient)</h4>
+                    <b>{data['buyer_name']}</b><br>
+                    {data['buyer_addr']}<br>
+                    <b>GSTIN/UIN:</b> {data['buyer_gstin']}<br>
+                    <b>CIN:</b> {data['buyer_cin']}<br>
+                    <b>State:</b> {data['pos']}
+                </div>
+                <div class="box">
+                    <h4>Bank Details for Payment</h4>
+                    <b>Account Name:</b> {data['bank_acc_name']}<br>
+                    <b>Bank Name:</b> {data['bank_name']}<br>
+                    <b>A/C Number:</b> {data['bank_acc_no']}<br>
+                    <b>IFSC Code:</b> {data['bank_ifsc']}
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:6%;">S.No</th>
+                        <th style="width:44%;">Description of Service</th>
+                        <th style="width:12%;">SAC Code</th>
+                        <th class="right" style="width:14%;">Taxable Value (₹)</th>
+                        <th class="right" style="width:10%;">IGST %</th>
+                        <th class="right" style="width:14%;">IGST Amt (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>{data['desc']}<br><small style="color:#64748b;">Ref: {data['cn_ref']}</small></td>
+                        <td>{data['sac']}</td>
+                        <td class="right">{data['taxable']:,.2f}</td>
+                        <td class="right">{data['gst_rate']}%</td>
+                        <td class="right">{data['igst']:,.2f}</td>
+                    </tr>
+                    <tr class="tot-row">
+                        <td colspan="3" class="right">Grand Total Invoice Value (INR)</td>
+                        <td class="right">₹{data['taxable']:,.2f}</td>
+                        <td></td>
+                        <td class="right">₹{data['total']:,.2f}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div style="margin-top:12px; font-size:11.5px; color:#475569;">
+                <b>Declaration:</b> We declare that this invoice shows the actual price of the services described and that all particulars are true and correct. Tax is payable on Forward Charge basis (IGST).
+            </div>
+
+            <div class="footer">
+                <div>
+                    <b>Terms:</b><br>
+                    1. Subject to Tinsukia / Guwahati (Assam) Jurisdiction.<br>
+                    2. Please quote Invoice No. during NEFT/IMPS remittance.
+                </div>
+                <div class="sig">
+                    <b>For {data['seller_name']}</b><br><br><br>
+                    __________________________<br>
+                    Authorised Signatory (Golap Gogoi)
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+def build_pdl_invoice_pdf(data):
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=32, leftMargin=32, topMargin=32, bottomMargin=32)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    title_style = ParagraphStyle("T", parent=styles["Heading1"], fontSize=16, textColor=colors.HexColor("#1e293b"), spaceAfter=4)
+    normal = ParagraphStyle("N", parent=styles["Normal"], fontSize=9.5, leading=13)
+    bold_r = ParagraphStyle("BR", parent=styles["Normal"], fontSize=10, alignment=2)
+
+    hdr = [
+        [
+            Paragraph(f"<b>{data['seller_name']}</b><br/>Proprietor: Golap Gogoi<br/>{data['seller_addr']}<br/><b>GSTIN:</b> {data['seller_gstin']} | State: Assam (18)<br/>Email: {data['seller_email']} | Mob: {data['seller_phone']}", normal),
+            Paragraph(f"<font size=14 color='#4f46e5'><b>TAX INVOICE</b></font><br/><b>Invoice No:</b> {data['inv_no']}<br/><b>Date:</b> {data['inv_date']}<br/><b>Credit Note Ref:</b> {data['cn_ref']}<br/><b>POS:</b> {data['pos']}", bold_r)
+        ]
+    ]
+    t_hdr = Table(hdr, colWidths=[310, 220])
+    t_hdr.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, 0), 1.2, colors.HexColor("#1e293b")), ("BOTTOMPADDING", (0, 0), (-1, 0), 10)]))
+    elements.append(t_hdr)
+    elements.append(Spacer(1, 12))
+
+    party_tbl = Table([
+        [
+            Paragraph(f"<b>BILLED TO:</b><br/><b>{data['buyer_name']}</b><br/>{data['buyer_addr']}<br/><b>GSTIN:</b> {data['buyer_gstin']}<br/><b>CIN:</b> {data['buyer_cin']}", normal),
+            Paragraph(f"<b>BANK DETAILS:</b><br/><b>A/C Name:</b> {data['bank_acc_name']}<br/><b>Bank:</b> {data['bank_name']}<br/><b>A/C No:</b> {data['bank_acc_no']}<br/><b>IFSC:</b> {data['bank_ifsc']}", normal)
+        ]
+    ], colWidths=[290, 240])
+    party_tbl.setStyle(TableStyle([("BOX", (0, 0), (0, 0), 0.5, colors.grey), ("BOX", (1, 0), (1, 0), 0.5, colors.grey), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("PADDING", (0, 0), (-1, -1), 8)]))
+    elements.append(party_tbl)
+    elements.append(Spacer(1, 14))
+
+    items_data = [
+        ["S.No", "Description of Service", "SAC", "Taxable (Rs.)", "IGST %", "IGST (Rs.)", "Total (Rs.)"],
+        ["1", Paragraph(f"{data['desc']}<br/>(Ref: {data['cn_ref']})", normal), data['sac'], f"{data['taxable']:,.2f}", f"{data['gst_rate']}%", f"{data['igst']:,.2f}", f"{data['total']:,.2f}"],
+        ["", "Grand Total Invoice Value (INR)", "", f"{data['taxable']:,.2f}", "", f"{data['igst']:,.2f}", f"Rs. {data['total']:,.2f}"]
+    ]
+    t_items = Table(items_data, colWidths=[35, 200, 50, 70, 45, 60, 70])
+    t_items.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2ff")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 2), (-1, 2), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("PADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(t_items)
+    elements.append(Spacer(1, 16))
+    elements.append(Paragraph("<b>Declaration:</b> We declare that this invoice shows the actual price of the services described and that all particulars are true and correct.", normal))
+    elements.append(Spacer(1, 36))
+    elements.append(Paragraph(f"<b>For {data['seller_name']}</b><br/><br/><br/>Authorised Signatory (Golap Gogoi)", bold_r))
+
+    doc.build(elements)
+    return buf.getvalue()
 
 # --- PREMIUM CSS (FIXES TOPBAR CLIPPING, POPOVER MENU, SIDEBAR DROPDOWNS & FONTS) ---
 st.markdown("""
@@ -81,7 +270,6 @@ st.markdown("""
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
 
-    /* Fix Top Bar Clipping so + New button is NEVER covered */
     header[data-testid="stHeader"] {
         background: transparent !important;
         height: 1.5rem !important;
@@ -96,7 +284,6 @@ st.markdown("""
         max-width: 97% !important;
     }
 
-    /* Left Sidebar Clean White Design */
     section[data-testid="stSidebar"] {
         background-color: #ffffff !important;
         border-right: 1px solid #e2e8f0 !important;
@@ -108,7 +295,6 @@ st.markdown("""
         padding-right: 0.85rem !important;
     }
 
-    /* Sidebar Menu Buttons */
     section[data-testid="stSidebar"] .stButton {
         margin-bottom: -5px !important;
     }
@@ -151,7 +337,6 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Clean Sidebar Dropdown Expanders */
     section[data-testid="stSidebar"] div[data-testid="stExpander"] {
         border: none !important;
         background: transparent !important;
@@ -179,7 +364,6 @@ st.markdown("""
         margin-left: 16px !important;
     }
 
-    /* + New Top Green Button & Borderless Clean Dropdown Menu (Screenshot 39 & 40) */
     div[data-testid="stPopover"] > button {
         background-color: #0f766e !important;
         color: #ffffff !important;
@@ -228,7 +412,6 @@ st.markdown("""
         color: #4f46e5 !important;
     }
 
-    /* Primary Purple Action Buttons */
     div[data-testid="stMainBlockContainer"] .stButton > button[kind="primary"],
     div[data-testid="stMainBlockContainer"] .stDownloadButton > button[kind="primary"] {
         background: linear-gradient(90deg, #6d28d9 0%, #4f46e5 100%) !important;
@@ -240,7 +423,6 @@ st.markdown("""
         box-shadow: 0 2px 6px rgba(109, 40, 217, 0.25) !important;
     }
 
-    /* Welcome Purple Banner (Screenshot 39) */
     .welcome-banner {
         background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
         border-radius: 16px;
@@ -262,7 +444,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Top Business Pill */
     .biz-selector {
         background: #ffffff;
         border: 1px solid #e2e8f0;
@@ -282,7 +463,6 @@ st.markdown("""
         font-weight: 700;
     }
 
-    /* White Cards & Containers */
     .b-section-box {
         background: #ffffff;
         border: 1px solid #e2e8f0;
@@ -420,7 +600,7 @@ def standardize_b2c_df(df, source_name, sign=1):
     return out[["Source", "POS", "GST_Rate", "Taxable_Value"]]
 
 # ==============================================================================
-# LEFT SIDEBAR NAVIGATION (EXACT BILLOORA EXPANDERS)
+# LEFT SIDEBAR NAVIGATION
 # ==============================================================================
 def nav_btn(label, target_page):
     is_active = (st.session_state.page == target_page)
@@ -442,9 +622,10 @@ with st.sidebar:
     nav_btn("🤝  Connections", "Connections")
     nav_btn("👑  Pricing  Free", "Pricing")
 
-    with st.expander("📈  Sales", expanded=(st.session_state.page in ["Invoices", "Create Invoice", "Upload Invoice"])):
+    with st.expander("📈  Sales", expanded=(st.session_state.page in ["Invoices", "Create Invoice", "Upload Invoice", "PDL Tax Invoice"])):
         nav_btn("📄  Invoices", "Invoices")
         nav_btn("➕  Create Invoice", "Create Invoice")
+        nav_btn("🎵  PDL Tax Invoice", "PDL Tax Invoice")
 
     with st.expander("🛒  Purchases", expanded=(st.session_state.page in ["Bills", "Other Expenses"])):
         nav_btn("🧾  Bills", "Bills")
@@ -475,11 +656,14 @@ with st.sidebar:
     nav_btn("⚙️  Settings", "Settings")
 
 # ==============================================================================
-# TOP BAR WITH UNCLIPPED "+ New v" DROPDOWN (SCREENSHOT 39 & 40 EXACT)
+# TOP BAR WITH "+ New v" DROPDOWN
 # ==============================================================================
 top_c1, top_c2, top_c3 = st.columns([2.2, 4.8, 3])
 with top_c1:
     with st.popover("➕ New  ⌄"):
+        if st.button("🎵  PDL Royalty Tax Invoice", key="top_pdl", use_container_width=True):
+            st.session_state.page = "PDL Tax Invoice"
+            st.rerun()
         if st.button("📄  Create invoice", key="top_ci", use_container_width=True):
             st.session_state.page = "Create Invoice"
             st.rerun()
@@ -522,9 +706,163 @@ home_state_code = st.session_state.user_gstin[:2] if len(st.session_state.user_g
 current_page = st.session_state.page
 
 # ==============================================================================
-# PAGE 1: DASHBOARD (SCREENSHOT 39 EXACT REPLICA)
+# PAGE: PDL ROYALTY GST TAX INVOICE (AUTO-SAVES TO GOOGLE SHEETS + PDF/HTML)
 # ==============================================================================
-if current_page == "Dashboard":
+if current_page == "PDL Tax Invoice":
+    st.markdown("## 🎵 PDL Royalty GST Tax Invoice")
+    st.caption("GK Maina Music → Phonographic Digital Ltd. (Mumbai) | Har invoice Google Sheets (Sales) mein save hoga aur PDF/Print ready milega.")
+
+    with st.container():
+        st.markdown('<div class="invoice-card-wrapper">', unsafe_allow_html=True)
+        pdl_count = len(sales_df[sales_df["Platform"].astype(str).str.contains("PDL|Phonographic", case=False, na=False)]) if not sales_df.empty else 0
+        default_inv_no = f"GKM/26-27/{str(pdl_count + 1).zfill(3)}"
+
+        c1, c2, c3 = st.columns(3)
+        p_inv_no = c1.text_input("Invoice Number *", value=default_inv_no)
+        p_inv_date = c2.date_input("Invoice Date *", value=date.today())
+        p_cn_ref = c3.text_input("PDL Credit Note Ref No. *", value="PDL-MUM/CN/26-27/49341")
+
+        c4, c5, c6 = st.columns([4, 2, 2])
+        p_desc = c4.text_input("Royalty / Service Description *", value="Spotify Royalty Distribution (Aug 2026)")
+        p_sac = c5.text_input("SAC Code *", value="997332")
+        p_gst_rate = c6.selectbox("IGST Rate (%)", [18, 12, 5, 0], index=0)
+
+        c7, c8 = st.columns([4, 4])
+        p_amount = c7.number_input("Credit Note Royalty Amount (₹) *", min_value=0.0, value=2455.00, step=100.0)
+        p_gst_mode = c8.radio(
+            "GST Calculation Mode",
+            ["Exclusive of GST (+18% IGST extra)", "Inclusive of GST (18% IGST included)"],
+            horizontal=True
+        )
+
+        if "Exclusive" in p_gst_mode:
+            p_taxable = round(p_amount, 2)
+            p_igst = round(p_taxable * (p_gst_rate / 100.0), 2)
+            p_total = round(p_taxable + p_igst, 2)
+        else:
+            p_total = round(p_amount, 2)
+            p_taxable = round(p_total / (1.0 + (p_gst_rate / 100.0)), 2) if p_gst_rate > 0 else p_total
+            p_igst = round(p_total - p_taxable, 2)
+
+        est_tds = round(p_taxable * 0.10, 2)
+        est_net_bank = round(p_total - est_tds, 2)
+
+        with st.expander("🏦 Bank Details & Buyer Info (Edit if needed)", expanded=False):
+            b1, b2 = st.columns(2)
+            buyer_name = b1.text_input("Buyer Name", value="PHONOGRAPHIC DIGITAL LTD. - MUMBAI")
+            buyer_gstin = b2.text_input("Buyer GSTIN", value="27AAJCP0626K1Z9")
+            b3, b4 = st.columns(2)
+            buyer_cin = b3.text_input("Buyer CIN", value="U74999MH2017PLC316341")
+            buyer_pos = b4.text_input("Place of Supply", value="Maharashtra (27)")
+            buyer_addr = st.text_input("Buyer Address", value="B-503, 5th Floor, VIP Plaza, Veera Estate, Off New Link Road, Andheri (West), Mumbai - 400053, Maharashtra")
+
+            bk1, bk2, bk3, bk4 = st.columns(4)
+            bank_acc_name = bk1.text_input("Account Holder", value="GK Maina Music / Golap Gogoi")
+            bank_name = bk2.text_input("Bank Name", value="State Bank of India")
+            bank_acc_no = bk3.text_input("Account Number", value="")
+            bank_ifsc = bk4.text_input("IFSC Code", value="")
+
+        # Live Summary Box
+        st.markdown(f"""
+        <div class="b-section-box" style="margin-top:14px; border:1.5px solid #c7d2fe; background:#f8fafc;">
+            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px;">
+                <div><div style="font-size:11.5px; color:#64748b;">Taxable Value</div><div style="font-size:20px; font-weight:800;">₹{p_taxable:,.2f}</div></div>
+                <div><div style="font-size:11.5px; color:#64748b;">IGST ({p_gst_rate}%)</div><div style="font-size:20px; font-weight:800; color:#4f46e5;">₹{p_igst:,.2f}</div></div>
+                <div><div style="font-size:11.5px; color:#64748b;">Total Invoice Value</div><div style="font-size:22px; font-weight:800; color:#0f766e;">₹{p_total:,.2f}</div></div>
+                <div><div style="font-size:11.5px; color:#64748b;">Est. Bank Payout (after 10% TDS ₹{est_tds:,.2f})</div><div style="font-size:18px; font-weight:700; color:#334155;">₹{est_net_bank:,.2f}</div></div>
+            </div>
+            <div style="font-size:11px; color:#64748b; margin-top:8px;">Note: TDS (10%) invoice par minus nahi hota; PDL payout ke waqt khud kaat kar aapke PAN par jama karta hai.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        inv_payload = {
+            "seller_name": st.session_state.biz_name,
+            "seller_addr": st.session_state.biz_address,
+            "seller_gstin": st.session_state.user_gstin,
+            "seller_email": st.session_state.biz_email,
+            "seller_phone": st.session_state.biz_phone,
+            "buyer_name": buyer_name,
+            "buyer_addr": buyer_addr,
+            "buyer_gstin": buyer_gstin,
+            "buyer_cin": buyer_cin,
+            "pos": buyer_pos,
+            "inv_no": p_inv_no,
+            "inv_date": str(p_inv_date),
+            "cn_ref": p_cn_ref,
+            "desc": p_desc,
+            "sac": p_sac,
+            "gst_rate": p_gst_rate,
+            "taxable": p_taxable,
+            "igst": p_igst,
+            "total": p_total,
+            "bank_acc_name": bank_acc_name,
+            "bank_name": bank_name,
+            "bank_acc_no": bank_acc_no or "—",
+            "bank_ifsc": bank_ifsc or "—"
+        }
+
+        html_doc = build_pdl_invoice_html(inv_payload)
+
+        btn1, btn2, btn3 = st.columns([3.5, 3.2, 3.3])
+        with btn1:
+            if st.button("💾 Save Invoice to Google Sheets", type="primary", use_container_width=True):
+                new_pdl_row = pd.DataFrame([{
+                    "Date": str(p_inv_date),
+                    "Invoice_No": p_inv_no,
+                    "Platform": "Phonographic Digital Ltd. (PDL)",
+                    "Product_Name": p_desc,
+                    "SKU": p_sac,
+                    "Qty": 1,
+                    "Selling_Price": p_total,
+                    "GST_Rate": p_gst_rate,
+                    "Taxable_Value": p_taxable,
+                    "CGST": 0.0,
+                    "SGST": 0.0,
+                    "IGST": p_igst,
+                    "Total": p_total,
+                    "Credit_Note_Ref": p_cn_ref
+                }])
+                updated_s = pd.concat([sales_df, new_pdl_row], ignore_index=True)
+                conn.update(worksheet="Sales", data=updated_s)
+                st.session_state.sales_df = updated_s
+                st.success(f"✅ Invoice {p_inv_no} Google Sheets (Sales tab) mein save ho gaya!")
+
+        with btn2:
+            if HAS_REPORTLAB:
+                pdf_bytes = build_pdl_invoice_pdf(inv_payload)
+                st.download_button(
+                    "⬇️ Download PDF Invoice",
+                    data=pdf_bytes,
+                    file_name=f"Tax_Invoice_{p_inv_no.replace('/', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            else:
+                st.download_button(
+                    "⬇️ Download Printable Invoice (HTML)",
+                    data=html_doc,
+                    file_name=f"Tax_Invoice_{p_inv_no.replace('/', '_')}.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
+
+        with btn3:
+            st.download_button(
+                "🖨️ Download HTML (Print to PDF)",
+                data=html_doc,
+                file_name=f"Tax_Invoice_{p_inv_no.replace('/', '_')}.html",
+                mime="text/html",
+                use_container_width=True
+            )
+
+        st.markdown("#### Live Invoice Preview")
+        st.components.v1.html(html_doc, height=620, scrolling=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# ==============================================================================
+# PAGE 1: DASHBOARD
+# ==============================================================================
+elif current_page == "Dashboard":
     if st.session_state.show_welcome_banner:
         st.markdown("""
         <div class="welcome-banner">
@@ -547,8 +885,8 @@ if current_page == "Dashboard":
 
         wb1, wb2, wb3, wb4 = st.columns([3, 3, 3, 1])
         with wb1:
-            if st.button("🚀 Start: Create your first invoice", use_container_width=True):
-                st.session_state.page = "Create Invoice"
+            if st.button("🎵 Start: Create PDL Tax Invoice", use_container_width=True):
+                st.session_state.page = "PDL Tax Invoice"
                 st.rerun()
         with wb2:
             if st.button("🧾 Start: Record your first expense", use_container_width=True):
@@ -638,7 +976,7 @@ if current_page == "Dashboard":
                 </div>
                 <div style="border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
                     <div style="font-size:11px; color:#64748b;">Top clients</div>
-                    <div style="font-size:12px; color:#94a3b8; margin-top:10px;">{"Meesho / Amazon" if not sales_df.empty else "No clients yet"}</div>
+                    <div style="font-size:12px; color:#94a3b8; margin-top:10px;">{"PDL / Meesho / Amazon" if not sales_df.empty else "No clients yet"}</div>
                 </div>
             </div>
             <div style="border-top:1px solid #f1f5f9; padding-top:12px; display:flex; justify-content:space-between; font-size:12px;">
@@ -649,10 +987,9 @@ if current_page == "Dashboard":
         """, unsafe_allow_html=True)
 
 # ==============================================================================
-# PAGE 2: CREATE INVOICE & UPLOAD INVOICE (SCREENSHOT 40 & 41 EXACT REPLICA)
+# PAGE 2: CREATE INVOICE & UPLOAD INVOICE
 # ==============================================================================
 elif current_page in ["Create Invoice", "Upload Invoice"]:
-    # Centered / Right-aligned clean Invoice sheet card like Screenshot 40 & 41
     spacer_l, inv_card_col, spacer_r = st.columns([0.5, 9, 0.5])
     with inv_card_col:
         st.markdown('<div class="invoice-card-wrapper">', unsafe_allow_html=True)
@@ -670,15 +1007,16 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
             """, unsafe_allow_html=True)
 
             r1c1, r1c2, r1c3, r1c4 = st.columns([3, 2.5, 2.5, 2])
-            inv_no_val = r1c1.text_input("Invoice No. (Auto if blank)", value=f"INVCP3X000{len(sales_df)+1}A")
+            inv_no_val = r1c1.text_input("Invoice No. (Auto if blank)", value=f"GKM/26-27/{str(len(sales_df)+1).zfill(3)}")
             inv_date_val = r1c2.date_input("Invoice Date *", date.today())
             due_date_val = r1c3.date_input("Due Date", date.today())
             with r1c4:
                 st.file_uploader("🖼️ Add Business Logo", type=["png", "jpg", "jpeg"], key="inv_logo")
 
-            r2c1, r2c2, _ = st.columns([4, 4, 2])
+            r2c1, r2c2, r2c3 = st.columns([3, 3, 4])
             inv_status = r2c1.selectbox("Status", ["Pending", "Paid", "Overdue"])
-            inv_pay_method = r2c2.selectbox("Payment Method", ["Bank Transfer", "UPI", "Cash", "Meesho / Amazon Settlement"])
+            inv_pay_method = r2c2.selectbox("Payment Method", ["Bank Transfer", "UPI", "Cash", "PDL / Meesho Settlement"])
+            tax_type_choice = r2c3.selectbox("Tax Type", ["Intra-State (CGST + SGST)", "Inter-State (IGST)"])
 
             st.markdown("<hr style='margin:16px 0; border-color:#f1f5f9;'>", unsafe_allow_html=True)
 
@@ -721,7 +1059,7 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
             lh1, lh2 = st.columns([8, 2])
             with lh1:
                 st.markdown(f"**Invoice Line Items** <span class='pill-b2c'>{len(st.session_state.inv_line_items)} Item</span>", unsafe_allow_html=True)
-                st.caption("Set product name, HSN, MRP and discount %. Taxable value and totals compute in real-time.")
+                st.caption("Set product name, HSN/SAC, MRP and discount %. Taxable value and totals compute in real-time.")
             with lh2:
                 if st.button("➕ Add Product", type="primary", use_container_width=True):
                     st.session_state.inv_line_items.append({"title": "", "hsn": "7117", "qty": 1, "mrp": 199.0, "disc": 0.0, "gst": 3, "batch": ""})
@@ -730,15 +1068,15 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
             sub_total_taxable = 0.0
             total_gst_amt = 0.0
             grand_total_amt = 0.0
-            first_item_title = "Jewellery Item"
+            first_item_title = "Item"
             first_item_hsn = "7117"
             total_qty_sum = 0
             first_gst_rate = 3
 
             for idx, item in enumerate(st.session_state.inv_line_items):
                 ic1, ic2, ic3, ic4, ic5, ic6, ic7, ic8 = st.columns([3, 1.3, 1, 1.4, 1.2, 1.4, 1.2, 1.5])
-                p_title = ic1.text_input("PRODUCT NAME *", value=item["title"], placeholder="Enter product title...", key=f"it_t_{idx}")
-                p_hsn = ic2.text_input("HSN CODE *", value=item["hsn"], placeholder="4/6/8 digit", key=f"it_h_{idx}")
+                p_title = ic1.text_input("PRODUCT / SERVICE *", value=item["title"], placeholder="Enter title...", key=f"it_t_{idx}")
+                p_hsn = ic2.text_input("HSN / SAC *", value=item["hsn"], placeholder="4/6/8 digit", key=f"it_h_{idx}")
                 p_qty = ic3.number_input("QTY *", min_value=1, value=int(item["qty"]), key=f"it_q_{idx}")
                 p_mrp = ic4.number_input("MRP (₹) *", min_value=0.0, value=float(item["mrp"]), step=10.0, key=f"it_m_{idx}")
                 p_disc = ic5.number_input("DISC (%)", min_value=0.0, max_value=100.0, value=float(item["disc"]), step=1.0, key=f"it_d_{idx}")
@@ -772,7 +1110,7 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
             sum_l, sum_r = st.columns([5.2, 4.8])
             with sum_r:
                 ex1, ex2, ex3 = st.columns(3)
-                add_disc_val = ex1.number_input("Add Discount %", min_value=0.0, value=0.0, step=10.0)
+                add_disc_val = ex1.number_input("Add Discount", min_value=0.0, value=0.0, step=10.0)
                 add_chg_val = ex2.number_input("Additional Charges", min_value=0.0, value=0.0, step=10.0)
                 add_shp_val = ex3.number_input("Shipping Charges", min_value=0.0, value=0.0, step=10.0)
 
@@ -786,7 +1124,7 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
                         <span>Sub Total (Taxable Value):</span><b>₹{sub_total_taxable:,.2f}</b>
                     </div>
                     <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px;">
-                        <span>Total GST (CGST + SGST / IGST):</span><b>₹{total_gst_amt:,.2f}</b>
+                        <span>Total GST ({tax_type_choice}):</span><b>₹{total_gst_amt:,.2f}</b>
                     </div>
                     <hr style="margin:10px 0;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -800,15 +1138,9 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
             with tc_col:
                 default_terms = (
                     "(1) All payments should be made as per agreed terms.\n"
-                    "(2) 24% interest will be charged after due date.\n"
-                    "(3) Payments by payee's A/C Order Cheque or Sagar Draft Only.\n"
-                    "(4) No allowance for short or measures unless notice of same given on the receipt of goods.\n"
-                    "(5) Our risk and responsibility ceases on dispatch of the goods from godown.\n"
-                    "(6) Goods once sold out cannot be return back under any circumstances.\n"
-                    "(7) Subject to Sagar Jurisdiction."
+                    "(2) Subject to Tinsukia / Guwahati (Assam) Jurisdiction."
                 )
-                st.text_area("Terms & Conditions", value=default_terms, height=145)
-                st.caption("Use numbered clauses; press Enter for a new line.")
+                st.text_area("Terms & Conditions", value=default_terms, height=110)
             with sig_col:
                 st.file_uploader("✍️ Add Signature", type=["png", "jpg", "jpeg"], key="inv_sig")
 
@@ -820,7 +1152,12 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
                     st.success("Saved to Drafts!")
             with act_c3:
                 if st.button("Save and Continue", type="primary", use_container_width=True):
-                    cgst_half = round(total_gst_amt / 2.0, 2)
+                    if "Inter-State" in tax_type_choice:
+                        cgst_v, sgst_v, igst_v = 0.0, 0.0, round(total_gst_amt, 2)
+                    else:
+                        cgst_v = round(total_gst_amt / 2.0, 2)
+                        sgst_v = round(total_gst_amt - cgst_v, 2)
+                        igst_v = 0.0
                     new_sale_row = pd.DataFrame([{
                         "Date": str(inv_date_val),
                         "Invoice_No": inv_no_val,
@@ -831,9 +1168,11 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
                         "Selling_Price": final_grand_total,
                         "GST_Rate": first_gst_rate,
                         "Taxable_Value": round(sub_total_taxable, 2),
-                        "CGST": cgst_half,
-                        "SGST": round(total_gst_amt - cgst_half, 2),
-                        "Total": round(final_grand_total, 2)
+                        "CGST": cgst_v,
+                        "SGST": sgst_v,
+                        "IGST": igst_v,
+                        "Total": round(final_grand_total, 2),
+                        "Credit_Note_Ref": ""
                     }])
                     updated_s = pd.concat([sales_df, new_sale_row], ignore_index=True)
                     conn.update(worksheet="Sales", data=updated_s)
@@ -851,7 +1190,7 @@ elif current_page in ["Create Invoice", "Upload Invoice"]:
         st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# PAGE 3: FILINGS -> GSTR-1 FILING (SCREENSHOT 32 EXACT REPLICA)
+# PAGE 3: FILINGS -> GSTR-1 FILING
 # ==============================================================================
 elif current_page == "GSTR-1 Filing":
     st.markdown("### 📄 GSTR-1 Filing")
@@ -860,7 +1199,7 @@ elif current_page == "GSTR-1 Filing":
     f1, f2, f3, f4 = st.columns([3, 3, 3, 1])
     filing_type = f1.selectbox("Type of Filing *", ["Monthly", "Quarterly"], key="g1_type")
     months_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-    sel_month = f2.selectbox("Month *", months_list, index=9, key="g1_month")
+    sel_month = f2.selectbox("Month *", months_list, index=10, key="g1_month")
     sel_year = f3.selectbox("Year *", ["2026", "2025", "2027"], index=0, key="g1_year")
     with f4:
         st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
@@ -942,7 +1281,11 @@ elif current_page == "GSTR-1 Filing":
     if inc_billoora and not sales_df.empty:
         db_temp = pd.DataFrame()
         db_temp["Source"] = "Billoora"
-        db_temp["POS"] = home_state_code
+        # Detect inter-state PDL invoices (POS = 27 Maharashtra) vs intra-state Assam (18)
+        db_temp["POS"] = sales_df.apply(
+            lambda r: "27" if ("PDL" in str(r.get("Platform", "")) or "Phonographic" in str(r.get("Platform", "")) or pd.to_numeric(r.get("IGST", 0), errors="coerce") > 0) else home_state_code,
+            axis=1
+        )
         db_temp["GST_Rate"] = pd.to_numeric(sales_df["GST_Rate"], errors="coerce").fillna(3.0)
         db_temp["Taxable_Value"] = pd.to_numeric(sales_df["Taxable_Value"], errors="coerce").fillna(0.0)
         dfs.append(db_temp)
@@ -994,7 +1337,7 @@ elif current_page == "GSTR-1 Filing":
         st.download_button("⬇️ Download JSON (for GST portal)", gstr1_json_str, file_name=f"GSTR1_{st.session_state.user_gstin}_{fp_code}.json", mime="application/json", type="primary", use_container_width=True)
 
 # ==============================================================================
-# PAGE 4: FILINGS -> GSTR-3B FILING (SCREENSHOT 33 EXACT REPLICA)
+# PAGE 4: FILINGS -> GSTR-3B FILING
 # ==============================================================================
 elif current_page == "GSTR-3B Filing":
     st.markdown("### 📑 GSTR-3B Filing")
@@ -1003,7 +1346,7 @@ elif current_page == "GSTR-3B Filing":
     f1, f2, f3, f4 = st.columns([3, 3, 3, 1])
     filing_type_3b = f1.selectbox("Type of Filing *", ["Monthly", "Quarterly"], key="g3_type")
     months_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-    sel_month_3b = f2.selectbox("Month *", months_list, index=9, key="g3_month")
+    sel_month_3b = f2.selectbox("Month *", months_list, index=10, key="g3_month")
     sel_year_3b = f3.selectbox("Year *", ["2026", "2025", "2027"], index=0, key="g3_year")
     with f4:
         st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
@@ -1029,7 +1372,7 @@ elif current_page == "GSTR-3B Filing":
     else:
         tcs_s_3b, tcs_r_3b, tax_i_3b = None, None, None
 
-    chk_billoora_3b = st.checkbox("Billoora invoices (my own sales) — Date range is set automatically from the period picker above.", value=True)
+    chk_billoora_3b = st.checkbox("Billoora invoices (my own sales & PDL invoices)", value=True)
     chk_manual_3b = st.checkbox("Manual sales upload — Same template as GSTR-1's manual upload.")
     man_3b_file = st.file_uploader("Upload Manual Sales Excel", type=["xlsx", "csv"], key="3b_man") if chk_manual_3b else None
 
@@ -1041,7 +1384,16 @@ elif current_page == "GSTR-3B Filing":
         if tcs_r_3b: out_dfs.append(standardize_b2c_df(parse_uploaded(tcs_r_3b), "Meesho Return", -1))
         if man_3b_file: out_dfs.append(standardize_b2c_df(parse_uploaded(man_3b_file), "Manual", 1))
         if chk_billoora_3b and not sales_df.empty:
-            db_s = pd.DataFrame({"Source": "Billoora", "POS": home_state_code, "GST_Rate": pd.to_numeric(sales_df["GST_Rate"], errors="coerce").fillna(3.0), "Taxable_Value": pd.to_numeric(sales_df["Taxable_Value"], errors="coerce").fillna(0.0)})
+            pos_series = sales_df.apply(
+                lambda r: "27" if ("PDL" in str(r.get("Platform", "")) or "Phonographic" in str(r.get("Platform", "")) or pd.to_numeric(r.get("IGST", 0), errors="coerce") > 0) else home_state_code,
+                axis=1
+            )
+            db_s = pd.DataFrame({
+                "Source": "Billoora",
+                "POS": pos_series,
+                "GST_Rate": pd.to_numeric(sales_df["GST_Rate"], errors="coerce").fillna(3.0),
+                "Taxable_Value": pd.to_numeric(sales_df["Taxable_Value"], errors="coerce").fillna(0.0)
+            })
             out_dfs.append(db_s)
 
         tx_tot, igst_tot, cgst_tot, sgst_tot = 0.0, 0.0, 0.0, 0.0
@@ -1064,10 +1416,10 @@ elif current_page == "GSTR-3B Filing":
         st.download_button("⬇️ Download GSTR-3B JSON (for GST Portal)", g3b_json, file_name=f"GSTR3B_{fp_3b}.json", mime="application/json", type="primary")
 
 # ==============================================================================
-# PAGE 5: SALES -> INVOICES (SCREENSHOT 34 EXACT REPLICA)
+# PAGE 5: SALES -> INVOICES
 # ==============================================================================
 elif current_page == "Invoices":
-    ih1, ih2 = st.columns([5, 5])
+    ih1, ih2 = st.columns([4.5, 5.5])
     with ih1:
         st.markdown("## Invoice Dashboard")
         st.caption("Manage and track all your invoices in one place")
@@ -1076,8 +1428,8 @@ elif current_page == "Invoices":
         with b1:
             st.download_button("📥 Export Data", sales_df.to_csv(index=False), "sales_invoices.csv", "text/csv", use_container_width=True)
         with b2:
-            if st.button("📙 Export GSTR-3B", use_container_width=True):
-                st.session_state.page = "GSTR-3B Filing"
+            if st.button("🎵 PDL Invoice", use_container_width=True):
+                st.session_state.page = "PDL Tax Invoice"
                 st.rerun()
         with b3:
             if st.button("⬆️ Upload Invoice", use_container_width=True):
@@ -1104,7 +1456,7 @@ elif current_page == "Invoices":
         q_inv = fl1.text_input("🔍 Search by clients, invoice number", label_visibility="collapsed", placeholder="🔍 Search by clients, invoice number")
         fl2.selectbox("Status", ["Status: All", "Paid", "Pending"], label_visibility="collapsed")
         fl3.selectbox("Dates", ["All dates", "This Month", "Last 30 days"], label_visibility="collapsed")
-        fl4.selectbox("Clients", ["All Clients", "Meesho", "Amazon", "Flipkart"], label_visibility="collapsed")
+        fl4.selectbox("Clients", ["All Clients", "PDL", "Meesho", "Amazon", "Flipkart"], label_visibility="collapsed")
         fl5.selectbox("Amount", ["Amount: All", "High to Low"], label_visibility="collapsed")
 
         if sales_df.empty:
@@ -1120,7 +1472,7 @@ elif current_page == "Invoices":
             st.info("No draft invoices saved yet.")
 
 # ==============================================================================
-# PAGE 6: PURCHASES -> BILLS & OTHER EXPENSES (SCREENSHOT 35 EXACT REPLICA)
+# PAGE 6: PURCHASES -> BILLS & OTHER EXPENSES
 # ==============================================================================
 elif current_page in ["Bills", "Other Expenses"]:
     bh1, bh2 = st.columns([5, 5])
@@ -1145,9 +1497,9 @@ elif current_page in ["Bills", "Other Expenses"]:
                     p_date = st.date_input("Bill Date", date.today())
                     p_bill = st.text_input("Bill / Invoice ID", f"BILL-{len(purch_df)+101}")
                     p_supp = st.text_input("Vendor / Supplier Name", "Guwahati Wholesale Jewellery")
-                    p_cat = st.selectbox("Category", ["Imitation Jewellery Stock", "Packaging Material", "Courier / Shipping", "Other Expense"])
+                    p_cat = st.selectbox("Category", ["Studio / Music Equipment", "Imitation Jewellery Stock", "Packaging Material", "Courier / Shipping", "Other Expense"])
                     p_tot = st.number_input("Total Bill Amount Paid (₹)", min_value=1.0, value=1500.0)
-                    p_gst = st.selectbox("GST % on Bill", [3, 5, 12, 18], index=0)
+                    p_gst = st.selectbox("GST % on Bill", [3, 5, 12, 18], index=3)
                     if st.form_submit_button("✅ Save Vendor Bill", type="primary"):
                         tx = round(p_tot / (1 + (p_gst / 100)), 2)
                         itc = round(p_tot - tx, 2)
@@ -1183,7 +1535,7 @@ elif current_page in ["Bills", "Other Expenses"]:
             st.dataframe(disp_p, use_container_width=True)
 
 # ==============================================================================
-# PAGE 7: KHATA BOOK (SCREENSHOT 36 & 37 EXACT REPLICA)
+# PAGE 7: KHATA BOOK
 # ==============================================================================
 elif current_page == "Khata Book":
     kh1, kh2 = st.columns([8, 2])
@@ -1247,7 +1599,7 @@ elif current_page == "Khata Book":
         st.markdown('<div class="b-section-box"><div style="font-weight:700;">🕒 Recent Transactions</div><div style="font-size:12.5px; color:#94a3b8; text-align:center; padding:25px 0;">No recent transactions</div></div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# PAGE 8: PRICING & OTHER MODULES (SCREENSHOT 38)
+# PAGE 8: PRICING & OTHER MODULES
 # ==============================================================================
 elif current_page == "Pricing":
     st.markdown("## 👑 Pricing & Product Margin Calculator")
@@ -1295,6 +1647,7 @@ elif current_page == "Connections":
     st.markdown("## 🤝 Marketplace & Database Connections")
     st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
     st.checkbox("✅ Google Sheets Live Database (`GK_Collection_DB`)", value=True)
+    st.checkbox("✅ PDL Royalty GST Tax Invoice Generator (18% IGST)", value=True)
     st.checkbox("✅ Meesho Supplier B2C Excel/CSV Parser", value=True)
     st.checkbox("✅ Amazon Seller Central MTR B2C Parser", value=True)
     st.checkbox("✅ Flipkart Seller Hub Tax Report Parser", value=True)
@@ -1304,10 +1657,10 @@ elif current_page == "Chat":
     st.markdown("## 💬 Billoora AI Tax & E-Commerce Assistant")
     for msg in st.session_state.chat_history:
         st.chat_message(msg["role"]).write(msg["text"])
-    q = st.chat_input("Ask about GSTR-1 JSON, HSN codes, or Meesho TCS claims...")
+    q = st.chat_input("Ask about GSTR-1 JSON, HSN/SAC codes, or PDL Royalty GST...")
     if q:
         st.session_state.chat_history.append({"role": "user", "text": q})
-        reply = "Jewellery (Imitation) par 3% GST lagta hai (HSN 7117). Aap GSTR-1 Filing page mein Meesho ki tcs_sales.xlsx upload karke seedha GST Portal ka JSON download kar sakte hain."
+        reply = "Music royalty (PDL) ke liye SAC Code 997332 aur 18% IGST lagta hai. Jewellery (Imitation) par 3% GST lagta hai (HSN 7117)."
         st.session_state.chat_history.append({"role": "assistant", "text": reply})
         st.rerun()
 
@@ -1320,8 +1673,10 @@ elif current_page == "Settings":
     st.markdown("## ⚙️ Business & GST Settings")
     st.session_state.biz_name = st.text_input("Legal / Trade Business Name", value=st.session_state.biz_name)
     st.session_state.user_gstin = st.text_input("Registered GSTIN (Assam - 18)", value=st.session_state.user_gstin)
-    st.text_input("Principal Place of Business (GST Registered)", value="Permanent Home Address, Assam")
-    st.text_input("Additional Place of Business (Courier Pickup)", value="Rented Dispatch Hub, Guwahati, Assam")
+    st.session_state.biz_address = st.text_input("Principal Place of Business (GST Registered)", value=st.session_state.biz_address)
+    st.session_state.biz_email = st.text_input("Business Email", value=st.session_state.biz_email)
+    st.session_state.biz_phone = st.text_input("Business Mobile", value=st.session_state.biz_phone)
+    st.text_input("Additional Place of Business (Courier Pickup)", value="Guwahati, Assam (Amendment Pending)")
     if st.button("Save Settings", type="primary"):
-        st.success("Business profile updated across all GST returns!")
+        st.success("Business profile updated across all GST returns & invoices!")
         st.rerun()
