@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import json
 import io
+import os
+import base64
 from datetime import date
 from streamlit_gsheets import GSheetsConnection
 
@@ -9,7 +11,7 @@ from streamlit_gsheets import GSheetsConnection
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     HAS_REPORTLAB = True
 except ImportError:
@@ -94,6 +96,11 @@ if "chat_history" not in st.session_state:
 
 # --- HELPER: GENERATE PRINTABLE HTML & PDF FOR PDL GST TAX INVOICE ---
 def build_pdl_invoice_html(data):
+    sig_html = (
+        f'<img src="data:image/png;base64,{data["sig_b64"]}" style="max-height:55px; margin:6px 0;" /><br>'
+        if data.get("sig_b64")
+        else "<br><br><br>"
+    )
     return f"""
     <!DOCTYPE html>
     <html>
@@ -196,7 +203,8 @@ def build_pdl_invoice_html(data):
                     2. Please quote Invoice No. during NEFT/IMPS remittance.
                 </div>
                 <div class="sig">
-                    <b>For {data['seller_name']}</b><br><br><br>
+                    <b>For {data['seller_name']}</b><br>
+                    {sig_html}
                     __________________________<br>
                     Authorised Signatory (Golap Gogoi)
                 </div>
@@ -212,7 +220,6 @@ def build_pdl_invoice_pdf(data):
     styles = getSampleStyleSheet()
     elements = []
 
-    title_style = ParagraphStyle("T", parent=styles["Heading1"], fontSize=16, textColor=colors.HexColor("#1e293b"), spaceAfter=4)
     normal = ParagraphStyle("N", parent=styles["Normal"], fontSize=9.5, leading=13)
     bold_r = ParagraphStyle("BR", parent=styles["Normal"], fontSize=10, alignment=2)
 
@@ -255,8 +262,15 @@ def build_pdl_invoice_pdf(data):
     elements.append(t_items)
     elements.append(Spacer(1, 16))
     elements.append(Paragraph("<b>Declaration:</b> We declare that this invoice shows the actual price of the services described and that all particulars are true and correct.", normal))
-    elements.append(Spacer(1, 36))
-    elements.append(Paragraph(f"<b>For {data['seller_name']}</b><br/><br/><br/>Authorised Signatory (Golap Gogoi)", bold_r))
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(f"<b>For {data['seller_name']}</b>", bold_r))
+    if data.get("sig_bytes"):
+        sig_img = RLImage(io.BytesIO(data["sig_bytes"]), width=110, height=42)
+        sig_img.hAlign = "RIGHT"
+        elements.append(sig_img)
+    else:
+        elements.append(Spacer(1, 30))
+    elements.append(Paragraph("Authorised Signatory (Golap Gogoi)", bold_r))
 
     doc.build(elements)
     return buf.getvalue()
@@ -762,6 +776,20 @@ if current_page == "PDL Tax Invoice":
             bank_acc_no = bk3.text_input("Account Number", value="")
             bank_ifsc = bk4.text_input("IFSC Code", value="")
 
+        # Signature Uploader or Auto-Load from GitHub (signature.png)
+        sig_file = st.file_uploader(
+            "✍️ Upload Signature (PNG/JPG) — ya GitHub mein 'signature.png' rakhein",
+            type=["png", "jpg", "jpeg"],
+            key="pdl_sig_up"
+        )
+        sig_bytes = None
+        if sig_file is not None:
+            sig_bytes = sig_file.getvalue()
+        elif os.path.exists("signature.png"):
+            with open("signature.png", "rb") as f:
+                sig_bytes = f.read()
+        sig_b64 = base64.b64encode(sig_bytes).decode() if sig_bytes else ""
+
         # Live Summary Box
         st.markdown(f"""
         <div class="b-section-box" style="margin-top:14px; border:1.5px solid #c7d2fe; background:#f8fafc;">
@@ -798,7 +826,9 @@ if current_page == "PDL Tax Invoice":
             "bank_acc_name": bank_acc_name,
             "bank_name": bank_name,
             "bank_acc_no": bank_acc_no or "—",
-            "bank_ifsc": bank_ifsc or "—"
+            "bank_ifsc": bank_ifsc or "—",
+            "sig_bytes": sig_bytes,
+            "sig_b64": sig_b64
         }
 
         html_doc = build_pdl_invoice_html(inv_payload)
@@ -1281,7 +1311,6 @@ elif current_page == "GSTR-1 Filing":
     if inc_billoora and not sales_df.empty:
         db_temp = pd.DataFrame()
         db_temp["Source"] = "Billoora"
-        # Detect inter-state PDL invoices (POS = 27 Maharashtra) vs intra-state Assam (18)
         db_temp["POS"] = sales_df.apply(
             lambda r: "27" if ("PDL" in str(r.get("Platform", "")) or "Phonographic" in str(r.get("Platform", "")) or pd.to_numeric(r.get("IGST", 0), errors="coerce") > 0) else home_state_code,
             axis=1
