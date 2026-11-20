@@ -91,10 +91,10 @@ if "saved_reports" not in st.session_state:
     st.session_state.saved_reports = []
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = [
-        {"role": "assistant", "text": "Namaste! Main Billoora AI Assistant hoon. Aap mujhse GSTR-1, GSTR-3B, PDL Royalty Invoice ya Meesho/Amazon B2C filings ke baare mein pooch sakte hain."}
+        {"role": "assistant", "text": "Namaste! Main Billoora AI Assistant hoon. Aap mujhse GSTR-1, GSTR-3B, PDL Royalty Invoice ya Rent RCM Self-Invoice ke baare mein pooch sakte hain."}
     ]
 
-# --- HELPER: GENERATE PRINTABLE HTML & PDF FOR PDL GST TAX INVOICE ---
+# --- HELPER 1: PDL GST TAX INVOICE (HTML & PDF) ---
 def build_pdl_invoice_html(data):
     sig_html = (
         f'<img src="data:image/png;base64,{data["sig_b64"]}" style="max-height:55px; margin:6px 0;" /><br>'
@@ -275,7 +275,204 @@ def build_pdl_invoice_pdf(data):
     doc.build(elements)
     return buf.getvalue()
 
-# --- PREMIUM CSS (FIXES TOPBAR CLIPPING, POPOVER MENU, SIDEBAR DROPDOWNS & FONTS) ---
+# --- HELPER 2: MONTHLY RENT SELF-INVOICE (RCM u/s 31(3)(f)) HTML & PDF ---
+def build_rent_self_invoice_html(data):
+    sig_html = (
+        f'<img src="data:image/png;base64,{data["sig_b64"]}" style="max-height:55px; margin:6px 0;" /><br>'
+        if data.get("sig_b64")
+        else "<br><br><br>"
+    )
+    elec_row = ""
+    if data["elec_amt"] > 0:
+        elec_row = f"""
+        <tr>
+            <td>2</td>
+            <td>Electricity / Utility Charges (Actual Meter — Exempt from GST)</td>
+            <td>—</td>
+            <td class="right">{data['elec_amt']:,.2f}</td>
+            <td class="right">0.00</td>
+            <td class="right">0.00</td>
+            <td class="right">{data['elec_amt']:,.2f}</td>
+        </tr>
+        """
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Self Invoice (RCM) - {data['inv_no']}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 24px; background: #ffffff; }}
+            .inv-box {{ max-width: 800px; margin: auto; border: 1.5px solid #1e293b; padding: 24px; }}
+            .header {{ display: flex; justify-content: space-between; border-bottom: 2px solid #1e293b; padding-bottom: 12px; margin-bottom: 14px; }}
+            .title {{ font-size: 20px; font-weight: 800; color: #1e293b; }}
+            .sub {{ font-size: 12px; color: #475569; margin-top: 3px; }}
+            .rcm-badge {{ background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 4px; display: inline-block; margin-top: 6px; }}
+            .grid2 {{ display: flex; justify-content: space-between; gap: 20px; margin-bottom: 16px; font-size: 12.5px; }}
+            .box {{ width: 48%; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 4px; }}
+            .box h4 {{ margin: 0 0 6px 0; font-size: 11.5px; text-transform: uppercase; color: #4f46e5; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }}
+            th, td {{ border: 1px solid #cbd5e1; padding: 8px 8px; text-align: left; }}
+            th {{ background: #f1f5f9; font-weight: 700; }}
+            .right {{ text-align: right; }}
+            .tot-row td {{ font-weight: 800; background: #f8fafc; font-size: 13px; }}
+            .footer {{ display: flex; justify-content: space-between; margin-top: 26px; font-size: 12px; }}
+            .sig {{ text-align: right; }}
+            @media print {{ body {{ padding: 0; }} .inv-box {{ border: 1.5px solid #000; }} }}
+        </style>
+    </head>
+    <body>
+        <div class="inv-box">
+            <div class="header">
+                <div>
+                    <div class="title">SELF-INVOICE (RCM)</div>
+                    <div class="sub">Issued under Section 31(3)(f) of the CGST Act, 2017</div>
+                    <div class="rcm-badge">TAX PAYABLE UNDER REVERSE CHARGE: YES (18% GST)</div>
+                </div>
+                <div style="text-align:right;">
+                    <div class="sub"><b>Self-Invoice No:</b> {data['inv_no']}</div>
+                    <div class="sub"><b>Invoice Date:</b> {data['inv_date']}</div>
+                    <div class="sub"><b>Rent Period:</b> {data['rent_period']}</div>
+                    <div class="sub"><b>Payment Mode:</b> {data['pay_mode']}</div>
+                </div>
+            </div>
+
+            <div class="grid2">
+                <div class="box">
+                    <h4>Supplier (Unregistered Landlord)</h4>
+                    <b>{data['landlord_name']}</b><br>
+                    {data['landlord_addr']}<br>
+                    <b>GSTIN:</b> Unregistered<br>
+                    <b>State:</b> Assam (18)
+                </div>
+                <div class="box">
+                    <h4>Recipient (Self-Invoice Issuer)</h4>
+                    <b>{data['buyer_name']}</b> (Prop: Golap Gogoi)<br>
+                    {data['buyer_addr']}<br>
+                    <b>GSTIN:</b> {data['buyer_gstin']}<br>
+                    <b>Place of Supply:</b> Assam (18)
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:5%;">S.No</th>
+                        <th style="width:36%;">Description of Service</th>
+                        <th style="width:9%;">SAC</th>
+                        <th class="right" style="width:13%;">Taxable (₹)</th>
+                        <th class="right" style="width:12%;">CGST 9% (₹)</th>
+                        <th class="right" style="width:12%;">SGST 9% (₹)</th>
+                        <th class="right" style="width:13%;">Total (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>Renting of Commercial / Business Premises for {data['rent_period']}</td>
+                        <td>997212</td>
+                        <td class="right">{data['rent_amt']:,.2f}</td>
+                        <td class="right">{data['cgst']:,.2f}</td>
+                        <td class="right">{data['sgst']:,.2f}</td>
+                        <td class="right">{data['rent_amt'] + data['total_rcm']:,.2f}</td>
+                    </tr>
+                    {elec_row}
+                    <tr class="tot-row">
+                        <td colspan="3" class="right">Total Rent Paid to Landlord: ₹{data['rent_amt'] + data['elec_amt']:,.2f} | Total RCM Tax Payable to Govt:</td>
+                        <td class="right">₹{data['rent_amt']:,.2f}</td>
+                        <td class="right">₹{data['cgst']:,.2f}</td>
+                        <td class="right">₹{data['sgst']:,.2f}</td>
+                        <td class="right">₹{data['total_rcm']:,.2f}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div style="margin-top:12px; font-size:11.5px; color:#475569;">
+                <b>GSTR-3B Compliance Note:</b> Report Taxable Value ₹{data['rent_amt']:,.2f}, CGST ₹{data['cgst']:,.2f}, SGST ₹{data['sgst']:,.2f} in <b>Table 3.1(d)</b> (Payable to Govt via Challan) and claim eligible ITC of ₹{data['total_rcm']:,.2f} in <b>Table 4(A)(3)</b>.
+            </div>
+
+            <div class="footer">
+                <div>
+                    <b>Internal Record Copy</b><br>
+                    Retain for GST records & ITC verification.
+                </div>
+                <div class="sig">
+                    <b>For {data['buyer_name']}</b><br>
+                    {sig_html}
+                    __________________________<br>
+                    Authorised Signatory (Golap Gogoi)
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+def build_rent_self_invoice_pdf(data):
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=32, leftMargin=32, topMargin=32, bottomMargin=32)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    normal = ParagraphStyle("RN", parent=styles["Normal"], fontSize=9.5, leading=13)
+    bold_r = ParagraphStyle("RBR", parent=styles["Normal"], fontSize=10, alignment=2)
+
+    hdr = [
+        [
+            Paragraph("<b><font size=14>SELF-INVOICE (RCM)</font></b><br/>Issued u/s 31(3)(f) of CGST Act, 2017<br/><b>Tax Payable under Reverse Charge: YES (18%)</b>", normal),
+            Paragraph(f"<b>Self-Invoice No:</b> {data['inv_no']}<br/><b>Date:</b> {data['inv_date']}<br/><b>Period:</b> {data['rent_period']}<br/><b>Mode:</b> {data['pay_mode']}", bold_r)
+        ]
+    ]
+    t_hdr = Table(hdr, colWidths=[310, 220])
+    t_hdr.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, 0), 1.2, colors.HexColor("#1e293b")), ("BOTTOMPADDING", (0, 0), (-1, 0), 10)]))
+    elements.append(t_hdr)
+    elements.append(Spacer(1, 12))
+
+    party_tbl = Table([
+        [
+            Paragraph(f"<b>SUPPLIER (UNREGISTERED LANDLORD):</b><br/><b>{data['landlord_name']}</b><br/>{data['landlord_addr']}<br/><b>GSTIN:</b> Unregistered | State: Assam (18)", normal),
+            Paragraph(f"<b>RECIPIENT (ISSUER):</b><br/><b>{data['buyer_name']}</b><br/>{data['buyer_addr']}<br/><b>GSTIN:</b> {data['buyer_gstin']} | POS: Assam (18)", normal)
+        ]
+    ], colWidths=[265, 265])
+    party_tbl.setStyle(TableStyle([("BOX", (0, 0), (0, 0), 0.5, colors.grey), ("BOX", (1, 0), (1, 0), 0.5, colors.grey), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("PADDING", (0, 0), (-1, -1), 8)]))
+    elements.append(party_tbl)
+    elements.append(Spacer(1, 14))
+
+    rows = [
+        ["S.No", "Description of Service", "SAC", "Taxable (Rs.)", "CGST 9%", "SGST 9%", "RCM Tax (Rs.)"],
+        ["1", Paragraph(f"Commercial / Business Premises Rent ({data['rent_period']})", normal), "997212", f"{data['rent_amt']:,.2f}", f"{data['cgst']:,.2f}", f"{data['sgst']:,.2f}", f"{data['total_rcm']:,.2f}"]
+    ]
+    if data["elec_amt"] > 0:
+        rows.append(["2", Paragraph("Electricity / Utility Charges (Exempt from GST)", normal), "-", f"{data['elec_amt']:,.2f}", "0.00", "0.00", "0.00"])
+    rows.append(["", "Total Payable to Govt (RCM) / Claimable ITC", "", f"{data['rent_amt']:,.2f}", f"{data['cgst']:,.2f}", f"{data['sgst']:,.2f}", f"Rs. {data['total_rcm']:,.2f}"])
+
+    t_items = Table(rows, colWidths=[32, 200, 48, 65, 58, 58, 69])
+    t_items.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2ff")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("PADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(t_items)
+    elements.append(Spacer(1, 14))
+    elements.append(Paragraph(f"<b>GSTR-3B Note:</b> Enter Taxable Rs.{data['rent_amt']:,.2f}, CGST Rs.{data['cgst']:,.2f}, SGST Rs.{data['sgst']:,.2f} in Table 3.1(d) & claim ITC of Rs.{data['total_rcm']:,.2f} in Table 4(A)(3).", normal))
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(f"<b>For {data['buyer_name']}</b>", bold_r))
+    if data.get("sig_bytes"):
+        sig_img = RLImage(io.BytesIO(data["sig_bytes"]), width=110, height=42)
+        sig_img.hAlign = "RIGHT"
+        elements.append(sig_img)
+    else:
+        elements.append(Spacer(1, 30))
+    elements.append(Paragraph("Authorised Signatory (Golap Gogoi)", bold_r))
+
+    doc.build(elements)
+    return buf.getvalue()
+
+# --- PREMIUM CSS ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -641,8 +838,9 @@ with st.sidebar:
         nav_btn("➕  Create Invoice", "Create Invoice")
         nav_btn("🎵  PDL Tax Invoice", "PDL Tax Invoice")
 
-    with st.expander("🛒  Purchases", expanded=(st.session_state.page in ["Bills", "Other Expenses"])):
+    with st.expander("🛒  Purchases", expanded=(st.session_state.page in ["Bills", "Other Expenses", "Rent Self-Invoice"])):
         nav_btn("🧾  Bills", "Bills")
+        nav_btn("🏠  Rent Self-Invoice (RCM)", "Rent Self-Invoice")
         nav_btn("💳  Other Expenses", "Other Expenses")
 
     with st.expander("📑  Filings", expanded=(st.session_state.page in ["GSTR-1 Filing", "GSTR-3B Filing", "Saved Reports"])):
@@ -677,6 +875,9 @@ with top_c1:
     with st.popover("➕ New  ⌄"):
         if st.button("🎵  PDL Royalty Tax Invoice", key="top_pdl", use_container_width=True):
             st.session_state.page = "PDL Tax Invoice"
+            st.rerun()
+        if st.button("🏠  Rent Self-Invoice (RCM)", key="top_rent", use_container_width=True):
+            st.session_state.page = "Rent Self-Invoice"
             st.rerun()
         if st.button("📄  Create invoice", key="top_ci", use_container_width=True):
             st.session_state.page = "Create Invoice"
@@ -720,9 +921,137 @@ home_state_code = st.session_state.user_gstin[:2] if len(st.session_state.user_g
 current_page = st.session_state.page
 
 # ==============================================================================
+# PAGE: MONTHLY RENT SELF-INVOICE (RCM u/s 31(3)(f))
+# ==============================================================================
+if current_page == "Rent Self-Invoice":
+    st.markdown("## 🏠 Monthly Rent Self-Invoice (18% GST RCM)")
+    st.caption("Unregistered landlord ke rent par Section 31(3)(f) Self-Invoice banayein, Google Sheets (Purchases) mein save karein aur PDF record rakhein.")
+
+    with st.container():
+        st.markdown('<div class="invoice-card-wrapper">', unsafe_allow_html=True)
+        rent_count = len(purch_df[purch_df["Category"].astype(str).str.contains("Rent", case=False, na=False)]) if not purch_df.empty else 0
+        default_rcm_no = f"SELF-RCM/26-27/{str(rent_count + 1).zfill(3)}"
+
+        r1, r2, r3 = st.columns(3)
+        r_inv_no = r1.text_input("Self-Invoice No. *", value=default_rcm_no)
+        r_inv_date = r2.date_input("Invoice Date *", value=date.today())
+        r_period = r3.text_input("Rent Month / Period *", value=date.today().strftime("%B %Y"))
+
+        r4, r5, r6 = st.columns(3)
+        r_landlord = r4.text_input("Landlord Name (Unregistered) *", value="House Owner (Guwahati)")
+        r_rent_amt = r5.number_input("Monthly Room Rent (₹) * (18% RCM)", min_value=0.0, value=7800.00, step=100.0)
+        r_elec_amt = r6.number_input("Electricity Bill (₹) (Exempt from GST)", min_value=0.0, value=1200.00, step=50.0)
+
+        r7, r8 = st.columns([6, 4])
+        r_landlord_addr = r7.text_input("Rented Premises Address *", value="Guwahati, Kamrup Metro, Assam")
+        r_pay_mode = r8.selectbox("Rent Payment Mode to Landlord", ["Cash", "UPI", "Bank Transfer"])
+
+        r_cgst = round(r_rent_amt * 0.09, 2)
+        r_sgst = round(r_rent_amt * 0.09, 2)
+        r_total_rcm = round(r_cgst + r_sgst, 2)
+
+        sig_file_r = st.file_uploader(
+            "✍️ Upload Signature (PNG/JPG) — ya GitHub mein 'signature.png' rakhein",
+            type=["png", "jpg", "jpeg"],
+            key="rcm_sig_up"
+        )
+        sig_bytes_r = None
+        if sig_file_r is not None:
+            sig_bytes_r = sig_file_r.getvalue()
+        elif os.path.exists("signature.png"):
+            with open("signature.png", "rb") as f:
+                sig_bytes_r = f.read()
+        sig_b64_r = base64.b64encode(sig_bytes_r).decode() if sig_bytes_r else ""
+
+        st.markdown(f"""
+        <div class="b-section-box" style="margin-top:14px; border:1.5px solid #fde68a; background:#fffbeb;">
+            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px;">
+                <div><div style="font-size:11.5px; color:#64748b;">Taxable Rent</div><div style="font-size:20px; font-weight:800;">₹{r_rent_amt:,.2f}</div></div>
+                <div><div style="font-size:11.5px; color:#64748b;">CGST 9% + SGST 9%</div><div style="font-size:18px; font-weight:800; color:#4f46e5;">₹{r_cgst:,.2f} + ₹{r_sgst:,.2f}</div></div>
+                <div><div style="font-size:11.5px; color:#64748b;">RCM Tax Payable to Govt</div><div style="font-size:22px; font-weight:800; color:#b45309;">₹{r_total_rcm:,.2f}</div></div>
+                <div><div style="font-size:11.5px; color:#64748b;">ITC Claimable (Table 4A3)</div><div style="font-size:20px; font-weight:800; color:#10b981;">₹{r_total_rcm:,.2f}</div></div>
+            </div>
+            <div style="font-size:11.5px; color:#78350f; margin-top:8px;">
+                <b>GSTR-3B Guide:</b> Table 3.1(d) mein ₹{r_rent_amt:,.2f} (CGST ₹{r_cgst:,.2f}, SGST ₹{r_sgst:,.2f}) enter karke ₹{r_total_rcm:,.2f} GST Portal par Challan (UPI/Net Banking) se pay karein, aur Table 4(A)(3) mein wahi ₹{r_total_rcm:,.2f} ITC wapas claim kar lein.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        rent_payload = {
+            "inv_no": r_inv_no,
+            "inv_date": str(r_inv_date),
+            "rent_period": r_period,
+            "pay_mode": r_pay_mode,
+            "landlord_name": r_landlord,
+            "landlord_addr": r_landlord_addr,
+            "buyer_name": st.session_state.biz_name,
+            "buyer_addr": st.session_state.biz_address,
+            "buyer_gstin": st.session_state.user_gstin,
+            "rent_amt": r_rent_amt,
+            "elec_amt": r_elec_amt,
+            "cgst": r_cgst,
+            "sgst": r_sgst,
+            "total_rcm": r_total_rcm,
+            "sig_bytes": sig_bytes_r,
+            "sig_b64": sig_b64_r
+        }
+
+        rent_html = build_rent_self_invoice_html(rent_payload)
+
+        rb1, rb2, rb3 = st.columns([3.6, 3.2, 3.2])
+        with rb1:
+            if st.button("💾 Save Rent & RCM ITC to Google Sheets", type="primary", use_container_width=True):
+                new_rent_row = pd.DataFrame([{
+                    "Date": str(r_inv_date),
+                    "Bill_No": r_inv_no,
+                    "Supplier_Name": f"{r_landlord} (Unregistered)",
+                    "Category": f"Commercial Rent RCM ({r_period})",
+                    "Total_Bill_Amount": round(r_rent_amt + r_elec_amt, 2),
+                    "GST_Rate": 18,
+                    "Taxable_Amount": r_rent_amt,
+                    "ITC_Claimed": r_total_rcm
+                }])
+                updated_p = pd.concat([purch_df, new_rent_row], ignore_index=True)
+                conn.update(worksheet="Purchases", data=updated_p)
+                st.session_state.purch_df = updated_p
+                st.success(f"✅ Self-Invoice {r_inv_no} Google Sheets (Purchases tab) mein save ho gaya!")
+
+        with rb2:
+            if HAS_REPORTLAB:
+                rent_pdf = build_rent_self_invoice_pdf(rent_payload)
+                st.download_button(
+                    "⬇️ Download PDF Self-Invoice",
+                    data=rent_pdf,
+                    file_name=f"Rent_Self_Invoice_{r_inv_no.replace('/', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            else:
+                st.download_button(
+                    "⬇️ Download Printable Self-Invoice (HTML)",
+                    data=rent_html,
+                    file_name=f"Rent_Self_Invoice_{r_inv_no.replace('/', '_')}.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
+
+        with rb3:
+            st.download_button(
+                "🖨️ Download HTML (Print to PDF)",
+                data=rent_html,
+                file_name=f"Rent_Self_Invoice_{r_inv_no.replace('/', '_')}.html",
+                mime="text/html",
+                use_container_width=True
+            )
+
+        st.markdown("#### Live Self-Invoice Preview")
+        st.components.v1.html(rent_html, height=580, scrolling=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# ==============================================================================
 # PAGE: PDL ROYALTY GST TAX INVOICE (AUTO-SAVES TO GOOGLE SHEETS + PDF/HTML)
 # ==============================================================================
-if current_page == "PDL Tax Invoice":
+elif current_page == "PDL Tax Invoice":
     st.markdown("## 🎵 PDL Royalty GST Tax Invoice")
     st.caption("GK Maina Music → Phonographic Digital Ltd. (Mumbai) | Har invoice Google Sheets (Sales) mein save hoga aur PDF/Print ready milega.")
 
@@ -776,7 +1105,6 @@ if current_page == "PDL Tax Invoice":
             bank_acc_no = bk3.text_input("Account Number", value="")
             bank_ifsc = bk4.text_input("IFSC Code", value="")
 
-        # Signature Uploader or Auto-Load from GitHub (signature.png)
         sig_file = st.file_uploader(
             "✍️ Upload Signature (PNG/JPG) — ya GitHub mein 'signature.png' rakhein",
             type=["png", "jpg", "jpeg"],
@@ -790,7 +1118,6 @@ if current_page == "PDL Tax Invoice":
                 sig_bytes = f.read()
         sig_b64 = base64.b64encode(sig_bytes).decode() if sig_bytes else ""
 
-        # Live Summary Box
         st.markdown(f"""
         <div class="b-section-box" style="margin-top:14px; border:1.5px solid #c7d2fe; background:#f8fafc;">
             <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px;">
@@ -919,8 +1246,8 @@ elif current_page == "Dashboard":
                 st.session_state.page = "PDL Tax Invoice"
                 st.rerun()
         with wb2:
-            if st.button("🧾 Start: Record your first expense", use_container_width=True):
-                st.session_state.page = "Bills"
+            if st.button("🏠 Start: Rent Self-Invoice (RCM)", use_container_width=True):
+                st.session_state.page = "Rent Self-Invoice"
                 st.rerun()
         with wb3:
             if st.button("⚙️ Start: Complete business profile", use_container_width=True):
@@ -1440,7 +1767,7 @@ elif current_page == "GSTR-3B Filing":
 
         itc_claim = pd.to_numeric(purch_df["ITC_Claimed"], errors="coerce").sum() if not purch_df.empty else 0.0
         st.markdown("#### Computed GSTR-3B Summary (Table 3.1 & Table 4 Eligible ITC)")
-        st.dataframe(pd.DataFrame([{"Outward Taxable (₹)": round(tx_tot, 2), "Output IGST (₹)": round(igst_tot, 2), "Output CGST (₹)": round(cgst_tot, 2), "Output SGST (₹)": round(sgst_tot, 2), "Eligible ITC from Bills/2B (₹)": round(itc_claim, 2)}]), use_container_width=True)
+        st.dataframe(pd.DataFrame([{"Outward Taxable (₹)": round(tx_tot, 2), "Output IGST (₹)": round(igst_tot, 2), "Output CGST (₹)": round(cgst_tot, 2), "Output SGST (₹)": round(sgst_tot, 2), "Eligible ITC from Bills/RCM (₹)": round(itc_claim, 2)}]), use_container_width=True)
         g3b_json = json.dumps({"gstin": st.session_state.user_gstin, "ret_period": fp_3b, "sup_details": {"osup_det": {"txval": round(tx_tot, 2), "iamt": round(igst_tot, 2), "camt": round(cgst_tot, 2), "samt": round(sgst_tot, 2)}}, "itc_elg": {"itc_avl": [{"ty": "OTH", "iamt": 0.0, "camt": round(itc_claim/2, 2), "samt": round(itc_claim/2, 2)}]}}, indent=2)
         st.download_button("⬇️ Download GSTR-3B JSON (for GST Portal)", g3b_json, file_name=f"GSTR3B_{fp_3b}.json", mime="application/json", type="primary")
 
@@ -1504,7 +1831,7 @@ elif current_page == "Invoices":
 # PAGE 6: PURCHASES -> BILLS & OTHER EXPENSES
 # ==============================================================================
 elif current_page in ["Bills", "Other Expenses"]:
-    bh1, bh2 = st.columns([5, 5])
+    bh1, bh2 = st.columns([4.5, 5.5])
     with bh1:
         st.caption("Bills Manager")
         st.markdown("## Bills & Expenses")
@@ -1514,7 +1841,9 @@ elif current_page in ["Bills", "Other Expenses"]:
         with b1:
             st.download_button("📥 Export Report", purch_df.to_csv(index=False), "purchase_bills.csv", "text/csv", use_container_width=True)
         with b2:
-            st.download_button("📘 Export GSTR-2", purch_df.to_csv(index=False), "gstr2_itc.csv", "text/csv", use_container_width=True)
+            if st.button("🏠 Rent RCM", use_container_width=True):
+                st.session_state.page = "Rent Self-Invoice"
+                st.rerun()
         with b3:
             if st.button("📙 Export GSTR-3B", key="b_3b", use_container_width=True):
                 st.session_state.page = "GSTR-3B Filing"
@@ -1677,6 +2006,7 @@ elif current_page == "Connections":
     st.markdown('<div class="b-section-box">', unsafe_allow_html=True)
     st.checkbox("✅ Google Sheets Live Database (`GK_Collection_DB`)", value=True)
     st.checkbox("✅ PDL Royalty GST Tax Invoice Generator (18% IGST)", value=True)
+    st.checkbox("✅ Monthly Rent Self-Invoice Generator (18% RCM)", value=True)
     st.checkbox("✅ Meesho Supplier B2C Excel/CSV Parser", value=True)
     st.checkbox("✅ Amazon Seller Central MTR B2C Parser", value=True)
     st.checkbox("✅ Flipkart Seller Hub Tax Report Parser", value=True)
@@ -1686,10 +2016,10 @@ elif current_page == "Chat":
     st.markdown("## 💬 Billoora AI Tax & E-Commerce Assistant")
     for msg in st.session_state.chat_history:
         st.chat_message(msg["role"]).write(msg["text"])
-    q = st.chat_input("Ask about GSTR-1 JSON, HSN/SAC codes, or PDL Royalty GST...")
+    q = st.chat_input("Ask about GSTR-1 JSON, HSN/SAC codes, Rent RCM, or PDL Royalty GST...")
     if q:
         st.session_state.chat_history.append({"role": "user", "text": q})
-        reply = "Music royalty (PDL) ke liye SAC Code 997332 aur 18% IGST lagta hai. Jewellery (Imitation) par 3% GST lagta hai (HSN 7117)."
+        reply = "Music royalty (PDL) par SAC 997332 (18% IGST) lagta hai. Unregistered landlord ke commercial rent par SAC 997212 (18% RCM) lagta hai jiska ITC GSTR-3B Table 4(A)(3) mein claim hota hai."
         st.session_state.chat_history.append({"role": "assistant", "text": reply})
         st.rerun()
 
